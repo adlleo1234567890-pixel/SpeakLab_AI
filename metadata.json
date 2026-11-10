@@ -1,0 +1,6 @@
+{
+  "name": "SpeakLab AI - Luyện thuyết trình & Phản biện",
+  "description": "Hệ thống luyện thuyết trình và phản biện thông minh dành cho học sinh trong phòng họp trực tuyến mô phỏng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
