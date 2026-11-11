@@ -14,7 +14,9 @@ import {
   FileText,
   Settings,
   PhoneOff,
-  Presentation
+  Presentation,
+  Circle,
+  Square
 } from 'lucide-react';
 
 interface MeetingControlsProps {
@@ -36,6 +38,8 @@ interface MeetingControlsProps {
   isMicLoading?: boolean;
   cameraError?: string | null;
   micError?: string | null;
+  recordingStatus?: 'idle' | 'recording' | 'finalizing' | 'ready' | 'error';
+  onRecordClick?: () => void;
 }
 
 export const MeetingControls: React.FC<MeetingControlsProps> = ({
@@ -57,6 +61,8 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   isMicLoading = false,
   cameraError,
   micError,
+  recordingStatus = 'idle',
+  onRecordClick,
 }) => {
   return (
     <div className="h-14 sm:h-16 md:h-18 bg-[#1B221D] border-t border-[#2D3930] px-2.5 sm:px-4 md:px-6 flex items-center justify-between shadow-2xl z-30 shrink-0">
@@ -70,13 +76,13 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
             Phòng họp mô phỏng
           </p>
           <p className="text-[10px] text-[#A8B6AB] leading-tight">
-            Đợt 3.1 · Trình diễn Camera & Micro thật (Chưa ghi hình)
+            Đợt 3.2A · Ghi PowerPoint + tiếng micro
           </p>
         </div>
       </div>
 
       {/* Center: Main control buttons (Min 40-44px touch target) */}
-      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 mx-auto">
+      <div className="flex items-center gap-1 sm:gap-2 md:gap-3 mx-auto overflow-x-auto min-w-0 shrink overscroll-x-contain" aria-label="Thanh điều khiển phòng họp">
         {/* Microphone */}
         <button
           onClick={onToggleMic}
@@ -153,6 +159,24 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
           {isScreenSharing && (
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D] animate-ping" />
           )}
+        </button>
+
+        {/* Bắt đầu hoặc dừng bản ghi màn hình + micro (3.2A) */}
+        <button
+          type="button"
+          onClick={onRecordClick}
+          disabled={!onRecordClick || recordingStatus === 'finalizing'}
+          aria-label={recordingStatus === 'recording' ? 'Dừng ghi hình PowerPoint và micro' : 'Bắt đầu ghi hình PowerPoint và micro'}
+          title={recordingStatus === 'recording' ? 'Dừng ghi hình' : recordingStatus === 'finalizing' ? 'Đang hoàn tất bản ghi…' : 'Ghi màn hình PowerPoint + micro (chưa gồm webcam)'}
+          className={`min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 sm:p-2.5 md:p-3 rounded-xl border transition-colors flex items-center justify-center shrink-0 ${
+            recordingStatus === 'recording'
+              ? 'bg-[#873631] text-white border-[#B9544D] hover:bg-[#A33E37]'
+              : recordingStatus === 'finalizing'
+              ? 'bg-[#27332A] text-[#A8B6AB] border-[#3A4A3E] opacity-60 cursor-wait'
+              : 'bg-[#27332A] text-[#F09995] border-[#3A4A3E] hover:bg-[#344438] cursor-pointer'
+          }`}
+        >
+          {recordingStatus === 'recording' ? <Square className="w-4.5 h-4.5 sm:w-5 sm:h-5" fill="currentColor" /> : <Circle className="w-4.5 h-4.5 sm:w-5 sm:h-5" fill="currentColor" />}
         </button>
 
         {/* Attendees List Toggle */}
