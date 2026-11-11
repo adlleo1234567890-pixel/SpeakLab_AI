@@ -40,6 +40,7 @@ import { pptxSessionStore } from '../services/pptxService';
 import { screenShareService } from '../services/screenShareService';
 import { mediaDeviceService, DevicePermissionState } from '../services/mediaDeviceService';
 import { ScreenAudioRecordingSession, PresentationRecordingResult } from '../services/presentationRecordingService';
+import { saveLocalVideo } from '../services/localVideoLibrary';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -103,6 +104,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordingResult, setRecordingResult] = useState<PresentationRecordingResult | null>(null);
   const [recordingDownloaded, setRecordingDownloaded] = useState(false);
+  const [recordingSavedLocal, setRecordingSavedLocal] = useState(false);
   const [recordingNotice, setRecordingNotice] = useState<string | null>(null);
   const [showRecordingConfirm, setShowRecordingConfirm] = useState(false);
 
@@ -138,8 +140,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       setRecordingNotice('Hãy dừng ghi hình và đợi hoàn tất tệp trước khi rời phòng.');
       return false;
     }
-    if (recordingResult && !recordingDownloaded) {
-      setRecordingNotice('Bản ghi mới chỉ nằm trong bộ nhớ trình duyệt. Hãy nhấn “Lưu video về thiết bị” trước khi rời phòng.');
+    if (recordingResult && !recordingDownloaded && !recordingSavedLocal) {
+      setRecordingNotice('Video chưa được lưu. Hãy tải bản ghi về thiết bị trước khi rời phòng.');
       return false;
     }
     return true;
@@ -148,8 +150,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const handleStartRecording = () => {
     setShowRecordingConfirm(false);
     if (recordingSessionRef.current || recordingStatus === 'finalizing') return;
-    if (recordingResult && !recordingDownloaded) {
-      setRecordingNotice('Hãy lưu bản ghi trước đó về thiết bị trước khi bắt đầu bản ghi mới.');
+    if (recordingResult && !recordingDownloaded && !recordingSavedLocal) {
+      setRecordingNotice('Hãy lưu hoặc tải bản ghi trước đó về thiết bị trước khi bắt đầu bản ghi mới.');
       return;
     }
 
@@ -174,6 +176,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       recordingSessionRef.current = sessionRecorder;
       setRecordingResult(null);
       setRecordingDownloaded(false);
+      setRecordingSavedLocal(false);
       setRecordingDuration(0);
       setRecordingStartedAt(Date.now());
       setRecordingStatus('recording');
@@ -192,9 +195,17 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       const result = await active.stop();
       setRecordingResult(result);
       setRecordingDownloaded(false);
-      setRecordingStatus('ready');
+      setRecordingSavedLocal(false);
       setRecordingDuration(Math.round(result.durationMs / 1000));
-      if (reason) setRecordingNotice(reason + ' Video đã hoàn tất, hãy lưu về thiết bị.');
+      try {
+        // IndexedDB is a temporary same-browser fallback; this is NOT a cloud upload.
+        await saveLocalVideo(session, result);
+        setRecordingSavedLocal(true);
+        if (reason) setRecordingNotice(reason + ' Đã lưu tạm trên trình duyệt, chưa đồng bộ Google Drive.');
+      } catch (saveError) {
+        setRecordingNotice((reason ? reason + ' ' : '') + (saveError instanceof Error ? saveError.message : 'Không lưu được video.') + ' Hãy nhấn “Lưu video” để tải về thiết bị ngay.');
+      }
+      setRecordingStatus('ready');
     } catch (error) {
       setRecordingStatus('error');
       setRecordingNotice(error instanceof Error ? error.message : 'Không thể hoàn tất bản ghi.');
@@ -226,14 +237,14 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (recordingSessionRef.current || recordingStatus === 'finalizing' || (recordingResult && !recordingDownloaded)) {
+      if (recordingSessionRef.current || recordingStatus === 'finalizing' || (recordingResult && !recordingDownloaded && !recordingSavedLocal)) {
         event.preventDefault();
         event.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [recordingStatus, recordingResult, recordingDownloaded]);
+  }, [recordingStatus, recordingResult, recordingDownloaded, recordingSavedLocal]);
 
   // Real Camera Toggle Handler
   const handleToggleCamera = async () => {
@@ -789,7 +800,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       >
         <div className="space-y-2 text-xs text-[#3D4740]">
           <p>Chỉ ghi <strong>màn hình PowerPoint đang chia sẻ</strong> và <strong>âm thanh micro</strong>. Camera chưa được đưa vào video ở bước 3.2A.</p>
-          <p className="text-[#647568]">Video được xử lý cục bộ, không tự động tải lên máy chủ. Hãy tải video về thiết bị sau khi dừng.</p>
+          <p className="text-[#647568]">Video tự động được lưu tạm trên trình duyệt này để xem trong Lịch sử. Chưa đồng bộ lên Google Drive. Có thể tải video về thiết bị.</p>
           <p className="font-medium text-[#873631]">Hãy bật micro và chia sẻ đúng cửa sổ trình chiếu PowerPoint trước khi bắt đầu.</p>
         </div>
       </Modal>
@@ -808,7 +819,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold">Video PowerPoint + micro đã hoàn tất</p>
             <p className="text-[11px] text-[#768078]">{formatTimer(Math.round(recordingResult.durationMs / 1000))} · {(recordingResult.bytes / 1024 / 1024).toFixed(1)} MB · {recordingResult.fileExtension.toUpperCase()}</p>
-            <p className="text-[10px] text-[#768078]">{recordingDownloaded ? 'Đã yêu cầu tải xuống; hãy kiểm tra thư mục Tải xuống.' : 'Chưa tải về – có thể mất nếu rời trang.'}</p>
+            <p className="text-[10px] text-[#768078]">{recordingSavedLocal ? 'Đã lưu tạm trên trình duyệt (chưa đồng bộ Drive). Xem lại trong Lịch sử.' : recordingDownloaded ? 'Đã yêu cầu tải xuống; hãy kiểm tra thư mục Tải xuống.' : 'Chưa lưu – hãy tải về máy trước khi rời phòng.'}</p>
           </div>
           <button onClick={handleDownloadRecording} className="bg-[#83A58E] text-white hover:bg-[#6F917A] font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0 cursor-pointer">
             <Download className="w-4 h-4" /> Lưu video
