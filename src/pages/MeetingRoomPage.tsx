@@ -208,7 +208,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
     const url = URL.createObjectURL(recordingResult.blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `SpeakLab_AI_ghi_man_hinh_${new Date().toISOString().replace(/[:.]/g, '-') }.${recordingResult.fileExtension}`;
+    link.download = `SpeakLab_AI_ghi_man_hinh_${new Date().toISOString().replace(/[:.]/g, '-')}.${recordingResult.fileExtension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
