@@ -77,23 +77,33 @@ class SessionService {
     deckId: string;
     participantCount: number;
     durationMinutes: number;
+    presentationSource?: import('../types').PresentationSource;
   }): PracticeSession {
     const mode = mockPracticeModes.find((m) => m.id === params.modeId) || mockPracticeModes[0];
     const deck = mockPresentationDecks.find((d) => d.id === params.deckId) || mockPresentationDecks[0];
+
+    const isPptx = params.presentationSource?.type === 'pptx';
+    const slideCount = isPptx && params.presentationSource
+      ? params.presentationSource.slideCount
+      : deck.slides.length;
+    const topic = isPptx && params.presentationSource
+      ? 'PowerPoint cá nhân'
+      : deck.category;
 
     const newSession: PracticeSession = {
       id: `ses_${Date.now()}`,
       title: params.title.trim() || `Buổi luyện: ${mode.title}`,
       mode: params.modeId,
       modeTitle: mode.title,
-      topic: deck.category,
+      topic,
       durationSeconds: params.durationMinutes * 60,
-      slideCount: deck.slides.length,
+      slideCount,
       participantCount: params.participantCount,
       createdAt: 'Vừa xong',
       status: 'in_progress',
       score: undefined,
       reportId: 'rep_01', // Link to demo report
+      presentationSource: params.presentationSource,
     };
 
     this.sessions.unshift(newSession);

@@ -22,7 +22,8 @@ import {
   PracticeSession,
   PresentationDeck,
   VirtualParticipant,
-  ActivePage
+  ActivePage,
+  PresentationSource
 } from '../types';
 import { SlideViewer } from '../features/meeting/SlideViewer';
 import { ParticipantGrid } from '../features/meeting/ParticipantGrid';
@@ -31,8 +32,10 @@ import { MeetingControls } from '../features/meeting/MeetingControls';
 import { AttendeeDrawer } from '../features/meeting/AttendeeDrawer';
 import { PresenterNotesDrawer } from '../features/meeting/PresenterNotesDrawer';
 import { EndMeetingModal } from '../features/meeting/EndMeetingModal';
+import { ScreenShareGuideModal } from '../features/meeting/ScreenShareGuideModal';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
+import { pptxSessionStore } from '../services/pptxService';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -52,6 +55,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   onFinishSession,
 }) => {
   // Presentation & Meeting State
+  const [activeSource, setActiveSource] = useState<PresentationSource | undefined>(
+    session.presentationSource
+  );
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
@@ -60,9 +66,15 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(145); // start with realistic ~2m25s demo time
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
+  // Screen Share State (Phase 2.3)
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [previousSource, setPreviousSource] = useState<PresentationSource | undefined>(undefined);
+  const [showShareGuideModal, setShowShareGuideModal] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+
   // Modals & Notices
   const [showEndModal, setShowEndModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCameraNoticeModal, setShowCameraNoticeModal] = useState(false);
   const [showTitleDetailModal, setShowTitleDetailModal] = useState(false);
@@ -73,6 +85,96 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
   // Mobile View Switcher: 'slide' | 'audience' | 'camera'
   const [mobileTab, setMobileTab] = useState<'slide' | 'audience' | 'camera'>('slide');
+
+  // Stop Screen Share handler
+  const handleStopScreenShare = () => {
+    if (screenStream) {
+      screenStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.error('Error stopping screen track:', e);
+        }
+      });
+    }
+    setScreenStream(null);
+    setIsScreenSharing(false);
+
+    if (previousSource) {
+      setActiveSource(previousSource);
+    } else {
+      setActiveSource(
+        session.presentationSource || {
+          type: 'demo',
+          deckId: deck.id,
+          name: deck.title,
+          slideCount: deck.slides.length,
+          status: 'ready',
+        }
+      );
+    }
+  };
+
+  // Start Screen Share handler
+  const handleStartScreenShare = async () => {
+    setShowShareGuideModal(false);
+
+    // Feature detection
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      setShareError(
+        'Trình duyệt hoặc thiết bị của bạn không hỗ trợ Web Screen Capture API. Để chia sẻ màn hình PowerPoint có hiệu ứng, vui lòng sử dụng trình duyệt Google Chrome hoặc Microsoft Edge trên máy tính.'
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          cursor: 'always',
+          displaySurface: 'window',
+        } as any,
+        audio: false,
+      });
+
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          // Native "Stop sharing" floating bar clicked in browser
+          handleStopScreenShare();
+        };
+      }
+
+      setPreviousSource(activeSource);
+      setScreenStream(stream);
+      setIsScreenSharing(true);
+      setActiveSource({
+        type: 'screenShare',
+        name: 'Cửa sổ PowerPoint (Animation trực tiếp)',
+        slideCount: activeSource?.slideCount || 1,
+        status: 'ready',
+        stream,
+      });
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'NotAllowedError') {
+        // User closed or dismissed the browser picker
+        console.log('Người dùng đã đóng hộp thoại chia sẻ màn hình.');
+      } else {
+        console.error('Lỗi khi kích hoạt Screen Capture:', err);
+        setShareError(
+          'Không thể khởi động chia sẻ màn hình. Nếu bạn đang chạy ứng dụng trong khung nhúng (iframe), trình duyệt có thể áp dụng chính sách bảo mật hạn chế chia sẻ màn hình. Bạn có thể mở ứng dụng trên tab trình duyệt độc lập hoặc tiếp tục luyện tập bằng Chế độ PPTX nội bộ.'
+        );
+      }
+    }
+  };
+
+  // Cleanup screen tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (screenStream) {
+        screenStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [screenStream]);
 
   // Elapsed time counter with clean lifecycle management
   useEffect(() => {
@@ -93,6 +195,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const totalSlides = activeSource?.type === 'pptx' ? (activeSource.slideCount || 1) : deck.slides.length;
+
   const handlePrevSlide = () => {
     if (currentSlideIndex > 0) {
       setCurrentSlideIndex(currentSlideIndex - 1);
@@ -100,7 +204,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   };
 
   const handleNextSlide = () => {
-    if (currentSlideIndex < deck.slides.length - 1) {
+    if (currentSlideIndex < totalSlides - 1) {
       setCurrentSlideIndex(currentSlideIndex + 1);
     }
   };
@@ -251,9 +355,21 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
                 onPrevSlide={handlePrevSlide}
                 onNextSlide={handleNextSlide}
                 onSelectSlide={(idx) => setCurrentSlideIndex(idx)}
-                onShareScreenClick={() => setShowShareModal(true)}
+                onShareScreenClick={() => setShowShareGuideModal(true)}
                 onToggleNotes={() => setIsNotesOpen(!isNotesOpen)}
                 isNotesOpen={isNotesOpen}
+                presentationSource={activeSource}
+                screenStream={screenStream}
+                onStopScreenShare={handleStopScreenShare}
+                onSwitchToDemo={() =>
+                  setActiveSource({
+                    type: 'demo',
+                    deckId: deck.id,
+                    name: deck.title,
+                    slideCount: deck.slides.length,
+                    status: 'ready',
+                  })
+                }
               />
             </div>
 
@@ -280,11 +396,27 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
                     Chỉ dẫn buổi nói
                   </span>
                   <span className="text-[10px] text-[#8C9E91] font-mono">
-                    Slide {currentSlideIndex + 1}/{deck.slides.length}
+                    {activeSource?.type === 'screenShare'
+                      ? 'Live Screen Share'
+                      : activeSource?.type === 'pptx'
+                      ? `${activeSource.slideCount} slides PPTX`
+                      : `Slide ${currentSlideIndex + 1}/${deck.slides.length}`}
                   </span>
                 </div>
                 <p className="text-[11px] text-[#C4D3C7] leading-relaxed">
-                  Bạn đang ở phần: <strong>{deck.slides[currentSlideIndex]?.title}</strong>. Thầy cô giám khảo đang theo dõi kỹ phương pháp và số liệu.
+                  {activeSource?.type === 'screenShare' ? (
+                    <>
+                      Bạn đang <strong>chia sẻ màn hình PowerPoint có hiệu ứng</strong>. Mọi hiệu ứng chuyển động và hoạt họa đang được truyền phát trực tiếp đến hội đồng.
+                    </>
+                  ) : activeSource?.type === 'pptx' ? (
+                    <>
+                      Bạn đang diễn tập với tệp: <strong>{activeSource.name}</strong>. Hội đồng mô phỏng đang lắng nghe phần trình bày mở đầu của bạn.
+                    </>
+                  ) : (
+                    <>
+                      Bạn đang ở phần: <strong>{deck.slides[currentSlideIndex]?.title}</strong>. Thầy cô giám khảo đang theo dõi kỹ phương pháp và số liệu.
+                    </>
+                  )}
                 </p>
                 <div className="pt-2 border-t border-[#2C392F] flex items-center justify-between text-[11px]">
                   <span>Hội đồng: {participants.filter((p) => p.role === 'judge').length} giám khảo</span>
@@ -313,7 +445,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           onClose={() => setIsNotesOpen(false)}
           slide={deck.slides[currentSlideIndex] || deck.slides[0]}
           currentSlideIndex={currentSlideIndex}
-          totalSlides={deck.slides.length}
+          totalSlides={totalSlides}
+          customTitle={activeSource?.type === 'pptx' ? `Slide ${currentSlideIndex + 1} · ${activeSource.name}` : undefined}
+          customNotes={activeSource?.type === 'pptx' ? pptxSessionStore.getSlideNotes(currentSlideIndex) : undefined}
         />
       </div>
 
@@ -323,7 +457,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         isCameraOff={isCameraOff}
         onToggleMic={() => setIsMuted(!isMuted)}
         onToggleCamera={() => setIsCameraOff(!isCameraOff)}
-        onShareScreenClick={() => setShowShareModal(true)}
+        onShareScreenClick={() => setShowShareGuideModal(true)}
+        isScreenSharing={isScreenSharing}
+        onStopScreenShare={handleStopScreenShare}
         onToggleAttendees={() => {
           setIsAttendeesOpen(!isAttendeesOpen);
           setIsNotesOpen(false);
@@ -385,35 +521,45 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         onClose={() => setShowEndModal(false)}
         elapsedSeconds={elapsedSeconds}
         onConfirmViewReport={() => {
+          handleStopScreenShare();
           setIsTimerRunning(false);
           setShowEndModal(false);
           onFinishSession();
         }}
         onReturnToDashboard={() => {
+          handleStopScreenShare();
           setIsTimerRunning(false);
           setShowEndModal(false);
           onNavigate('dashboard');
         }}
       />
 
-      {/* Share Screen Info Modal */}
+      {/* Screen Share 5-Step Guidance Modal (Phase 2.3) */}
+      <ScreenShareGuideModal
+        isOpen={showShareGuideModal}
+        onClose={() => setShowShareGuideModal(false)}
+        onConfirmStartShare={handleStartScreenShare}
+      />
+
+      {/* Screen Share Error / Browser Support Notice Modal */}
       <Modal
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        title="Chia sẻ màn hình"
-        subtitle="Tính năng dự kiến tích hợp trong Đợt 2"
+        isOpen={Boolean(shareError)}
+        onClose={() => setShareError(null)}
+        title="Thông báo chia sẻ màn hình"
+        subtitle="Không thể bắt đầu truyền luồng màn hình"
         footer={
-          <Button variant="primary" size="sm" onClick={() => setShowShareModal(false)}>
-            Đã hiểu
+          <Button variant="primary" size="sm" onClick={() => setShareError(null)}>
+            Đã hiểu / Tiếp tục dùng slide nội bộ
           </Button>
         }
       >
         <div className="space-y-3 text-xs text-[#3D4740]">
-          <div className="p-3 bg-[#EEF4F0] rounded-xl border border-[#D9E5DC] flex items-start gap-2.5">
-            <Share2 className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
-            <p>
-              Trong phiên bản Đợt 1, bạn có thể chuyển đổi linh hoạt các trang slide mẫu trực tiếp qua thanh công cụ trình chiếu. Chức năng truyền hình ảnh chia sẻ màn hình máy tính thông qua Screen Capture Web API sẽ được mở khóa ở Đợt 2.
-            </p>
+          <div className="p-3 bg-[#FAFBF9] rounded-xl border border-[#E4E9E3] text-[11px] leading-relaxed space-y-2">
+            <p className="font-semibold text-[#873631]">Gặp vấn đề khi cấp quyền chia sẻ:</p>
+            <p className="text-[#556057]">{shareError}</p>
+          </div>
+          <div className="p-2.5 rounded-lg bg-[#EEF4F0] border border-[#D9E5DC] text-[11px] text-[#2A4433]">
+            💡 Bạn vẫn có thể tiếp tục diễn tập thuyết trình và phản biện bằng <strong>Chế độ trình chiếu PPTX nội bộ</strong> hoặc <strong>Slide mẫu</strong> đã chuẩn bị sẵn.
           </div>
         </div>
       </Modal>

@@ -10,9 +10,11 @@ import { PresentationSlide } from '../../types';
 interface PresenterNotesDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  slide: PresentationSlide;
+  slide?: PresentationSlide;
   currentSlideIndex: number;
   totalSlides: number;
+  customTitle?: string;
+  customNotes?: string;
 }
 
 export const PresenterNotesDrawer: React.FC<PresenterNotesDrawerProps> = ({
@@ -21,8 +23,13 @@ export const PresenterNotesDrawer: React.FC<PresenterNotesDrawerProps> = ({
   slide,
   currentSlideIndex,
   totalSlides,
+  customTitle,
+  customNotes,
 }) => {
   if (!isOpen) return null;
+
+  const displayTitle = customTitle || slide?.title || `Slide ${currentSlideIndex + 1}`;
+  const displayNotes = customNotes !== undefined ? customNotes : (slide?.speakerNotes || 'Không có ghi chú riêng cho slide này.');
 
   return (
     <div className="w-80 md:w-96 bg-[#1F2621] border-l border-[#2E3A31] flex flex-col h-full shadow-2xl z-20 animate-in slide-in-from-right duration-200">
@@ -50,7 +57,7 @@ export const PresenterNotesDrawer: React.FC<PresenterNotesDrawerProps> = ({
           <span className="text-[10px] text-[#83A58E] font-semibold uppercase tracking-wider">
             Tiêu đề Slide hiện tại
           </span>
-          <h4 className="text-sm font-bold text-white mt-1">{slide.title}</h4>
+          <h4 className="text-sm font-bold text-white mt-1 break-all">{displayTitle}</h4>
         </div>
 
         {/* Speaker Notes */}
@@ -59,8 +66,8 @@ export const PresenterNotesDrawer: React.FC<PresenterNotesDrawerProps> = ({
             <FileText className="w-3.5 h-3.5 text-[#83A58E]" />
             <span>Lời thoại gợi ý cho học sinh:</span>
           </label>
-          <div className="p-3.5 rounded-xl bg-[#18201A] border border-[#2B382F] text-[#D8E6DC] leading-relaxed text-xs">
-            {slide.speakerNotes || 'Không có ghi chú riêng cho slide này.'}
+          <div className="p-3.5 rounded-xl bg-[#18201A] border border-[#2B382F] text-[#D8E6DC] leading-relaxed text-xs whitespace-pre-wrap">
+            {displayNotes}
           </div>
         </div>
 

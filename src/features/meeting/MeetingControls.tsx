@@ -30,6 +30,8 @@ interface MeetingControlsProps {
   isNotesOpen: boolean;
   onOpenSettings: () => void;
   onEndMeeting: () => void;
+  isScreenSharing?: boolean;
+  onStopScreenShare?: () => void;
 }
 
 export const MeetingControls: React.FC<MeetingControlsProps> = ({
@@ -45,6 +47,8 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   isNotesOpen,
   onOpenSettings,
   onEndMeeting,
+  isScreenSharing = false,
+  onStopScreenShare,
 }) => {
   return (
     <div className="h-16 md:h-18 bg-[#1B221D] border-t border-[#2D3930] px-3 md:px-6 flex items-center justify-between shadow-2xl z-30 shrink-0">
@@ -91,13 +95,20 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
           {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
         </button>
 
-        {/* Share Screen (notice) */}
+        {/* Share Screen */}
         <button
-          onClick={onShareScreenClick}
-          className="min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E] transition-all cursor-pointer hidden sm:flex items-center justify-center"
-          title="Chia sẻ màn hình (Tính năng Đợt 2)"
+          onClick={isScreenSharing && onStopScreenShare ? onStopScreenShare : onShareScreenClick}
+          className={`min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center relative ${
+            isScreenSharing
+              ? 'bg-[#83A58E] text-white hover:bg-[#6F917A] shadow-md ring-2 ring-[#83A58E]/40'
+              : 'bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E]'
+          }`}
+          title={isScreenSharing ? 'Đang chia sẻ màn hình (Bấm để dừng)' : 'Chia sẻ màn hình PowerPoint có hiệu ứng'}
         >
           <Share2 className="w-5 h-5" />
+          {isScreenSharing && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D] animate-ping" />
+          )}
         </button>
 
         {/* Attendees List Toggle */}

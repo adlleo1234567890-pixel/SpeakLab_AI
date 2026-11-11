@@ -17,9 +17,18 @@ import {
   Award,
   CheckCircle2,
   Eye,
-  ScrollText
+  ScrollText,
+  FileCheck,
+  Sparkles,
+  Info,
+  AlertCircle,
+  RefreshCw,
+  Smartphone,
+  Square,
+  Monitor
 } from 'lucide-react';
-import { PresentationSlide } from '../../types';
+import { PresentationSlide, PresentationSource } from '../../types';
+import { pptxSessionStore } from '../../services/pptxService';
 
 interface SlideViewerProps {
   slides: PresentationSlide[];
@@ -30,11 +39,15 @@ interface SlideViewerProps {
   onShareScreenClick: () => void;
   onToggleNotes: () => void;
   isNotesOpen: boolean;
+  presentationSource?: PresentationSource;
+  onSwitchToDemo?: () => void;
+  screenStream?: MediaStream | null;
+  onStopScreenShare?: () => void;
 }
 
-// Fixed 16:9 virtual canvas reference coordinate system (Standard presentation ratio)
-const SLIDE_BASE_WIDTH = 960;
-const SLIDE_BASE_HEIGHT = 540;
+// Fallback virtual canvas coordinate system (16:9)
+const DEFAULT_SLIDE_WIDTH = 960;
+const DEFAULT_SLIDE_HEIGHT = 540;
 
 export const SlideViewer: React.FC<SlideViewerProps> = ({
   slides,
@@ -45,19 +58,47 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
   onShareScreenClick,
   onToggleNotes,
   isNotesOpen,
+  presentationSource,
+  onSwitchToDemo,
+  screenStream,
+  onStopScreenShare,
 }) => {
   const [laserActive, setLaserActive] = useState(false);
   const [laserPos, setLaserPos] = useState({ x: 50, y: 50 });
   const [viewMode, setViewMode] = useState<'fit' | 'scroll'>('fit');
+  const [showPptxEffectTip, setShowPptxEffectTip] = useState(true);
 
+  // Container dimensions via ResizeObserver
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number }>({
     width: 0,
     height: 0,
   });
 
-  const currentSlide = slides[currentSlideIndex] || slides[0];
+  const isScreenShare = presentationSource?.type === 'screenShare';
+  const isPptx = presentationSource?.type === 'pptx';
+  const currentDemoSlide = slides[currentSlideIndex] || slides[0];
+
+  // Connect screen capture stream to video element
+  useEffect(() => {
+    if (isScreenShare && videoRef.current) {
+      videoRef.current.srcObject = screenStream || null;
+    }
+  }, [isScreenShare, screenStream]);
+
+  // PPTX Real Presentation State
+  const [isLoadingPptx, setIsLoadingPptx] = useState(false);
+  const [pptxError, setPptxError] = useState<string | null>(null);
+  const [pptxSvg, setPptxSvg] = useState<string | null>(null);
+  const [slideDimensions, setSlideDimensions] = useState<{ width: number; height: number }>({
+    width: DEFAULT_SLIDE_WIDTH,
+    height: DEFAULT_SLIDE_HEIGHT,
+  });
+  const [totalPptxSlides, setTotalPptxSlides] = useState<number>(
+    presentationSource?.slideCount || 1
+  );
 
   // Dynamic measuring of available canvas area using ResizeObserver
   useLayoutEffect(() => {
@@ -104,6 +145,76 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
     }
   }, [currentSlideIndex]);
 
+  // Load and parse real PPTX presentation via @web-ppt/core
+  useEffect(() => {
+    if (!isPptx) {
+      setPptxSvg(null);
+      setPptxError(null);
+      setIsLoadingPptx(false);
+      return;
+    }
+
+    let isMounted = true;
+    const loadRealPptx = async () => {
+      setIsLoadingPptx(true);
+      setPptxError(null);
+
+      try {
+        const file = presentationSource?.pptxInfo?.file || pptxSessionStore.getPptx()?.file;
+        if (!file) {
+          throw new Error('Tệp PowerPoint không còn trong bộ nhớ phiên. Vui lòng quay lại trang chuẩn bị để chọn tệp.');
+        }
+
+        const pres = await pptxSessionStore.loadPresentation(file);
+        if (!pres || pres.slides.length === 0) {
+          throw new Error('Tệp PowerPoint hợp lệ nhưng không tìm thấy slide nào để trình chiếu.');
+        }
+
+        if (!isMounted) return;
+
+        const nativeW = pres.width > 0 ? pres.width : DEFAULT_SLIDE_WIDTH;
+        const nativeH = pres.height > 0 ? pres.height : DEFAULT_SLIDE_HEIGHT;
+
+        setSlideDimensions({ width: nativeW, height: nativeH });
+        setTotalPptxSlides(pres.slides.length);
+
+        const safeIndex = Math.min(Math.max(0, currentSlideIndex), pres.slides.length - 1);
+        const svgString = pptxSessionStore.renderSlideSvg(safeIndex);
+        setPptxSvg(svgString);
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : 'Lỗi khi dựng nội dung slide PowerPoint.';
+        setPptxError(msg);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPptx(false);
+        }
+      }
+    };
+
+    loadRealPptx();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isPptx, presentationSource?.pptxInfo?.file]);
+
+  // Render slide when currentSlideIndex changes in PPTX mode
+  useEffect(() => {
+    if (!isPptx || isLoadingPptx) return;
+
+    try {
+      const pres = pptxSessionStore.getParsedPresentation();
+      if (pres && pres.slides.length > 0) {
+        const safeIndex = Math.min(Math.max(0, currentSlideIndex), pres.slides.length - 1);
+        const svgString = pptxSessionStore.renderSlideSvg(safeIndex);
+        setPptxSvg(svgString);
+      }
+    } catch (err: unknown) {
+      console.error('Lỗi khi chuyển slide PPTX:', err);
+    }
+  }, [currentSlideIndex, isPptx, isLoadingPptx]);
+
   const handleToggleViewMode = () => {
     if (viewMode === 'scroll') {
       if (scrollContainerRef.current) {
@@ -115,14 +226,18 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
     }
   };
 
+  // Determine active native slide dimensions (16:9, 4:3, or custom from PPTX)
+  const activeSlideWidth = isPptx ? slideDimensions.width : DEFAULT_SLIDE_WIDTH;
+  const activeSlideHeight = isPptx ? slideDimensions.height : DEFAULT_SLIDE_HEIGHT;
+
   // Two-axis proportional scale calculation
   const paddingX = containerDimensions.width < 500 ? 12 : 24;
   const paddingY = containerDimensions.height < 400 ? 12 : 24;
   const availW = Math.max(100, containerDimensions.width - paddingX);
   const availH = Math.max(100, containerDimensions.height - paddingY);
 
-  const scaleX = availW / SLIDE_BASE_WIDTH;
-  const scaleY = availH / SLIDE_BASE_HEIGHT;
+  const scaleX = availW / activeSlideWidth;
+  const scaleY = availH / activeSlideHeight;
   const rawScale = Math.min(scaleX, scaleY);
   const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
 
@@ -137,7 +252,9 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
     }
   };
 
-  const renderVisualGraphic = (type?: string, isScaledCanvas = true) => {
+  const totalEffectiveSlides = isPptx ? totalPptxSlides : slides.length;
+
+  const renderVisualGraphic = (type?: string) => {
     switch (type) {
       case 'chart':
         return (
@@ -248,157 +365,243 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
       {/* 1. Top Slide Header toolbar inside meeting */}
       <div className="h-11 bg-[#242C26] border-b border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs text-[#A8B6AB] shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <span className="w-2 h-2 rounded-full bg-[#83A58E] shrink-0" />
+          <span className={`w-2 h-2 rounded-full shrink-0 ${isScreenShare ? 'bg-[#83A58E] animate-pulse ring-2 ring-[#83A58E]/40' : 'bg-[#83A58E]'}`} />
           <span className="font-medium text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">
-            Slide {currentSlideIndex + 1}: {currentSlide.title}
+            {isScreenShare
+              ? 'Phát trực tiếp: Cửa sổ PowerPoint'
+              : isPptx
+              ? `Tệp PPTX: ${presentationSource.name}`
+              : `Slide ${currentSlideIndex + 1}: ${currentDemoSlide.title}`}
           </span>
-          <span className="text-[10px] bg-[#2E3A31] text-[#A8B6AB] px-1.5 py-0.5 rounded font-mono shrink-0">
-            {currentSlideIndex + 1}/{slides.length}
-          </span>
+          {!isScreenShare ? (
+            <span className="text-[10px] bg-[#2E3A31] text-[#A8B6AB] px-1.5 py-0.5 rounded font-mono shrink-0">
+              Slide {currentSlideIndex + 1}/{totalEffectiveSlides}
+            </span>
+          ) : (
+            <span className="text-[10px] bg-[#1E2721] text-[#83A58E] px-2 py-0.5 rounded font-medium shrink-0 border border-[#2D3930] flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-[#83A58E]" />
+              <span>Hiệu ứng trực tiếp</span>
+            </span>
+          )}
+
+          {isPptx && !isScreenShare && (
+            <span className="hidden lg:inline text-[10px] text-[#83A58E] bg-[#1E2721] px-1.5 py-0.5 rounded border border-[#2D3930]">
+              Tỷ lệ gốc: {activeSlideWidth}:{activeSlideHeight}
+            </span>
+          )}
         </div>
 
         {/* Action Controls in toolbar */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* View mode toggle: Fit vs Scroll */}
-          <button
-            onClick={handleToggleViewMode}
-            className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'fit'
-                ? 'bg-[#83A58E] text-white'
-                : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
-            }`}
-            title={viewMode === 'fit' ? 'Đang ở chế độ Vừa khung (bấm để Cuộn đọc)' : 'Đang ở chế độ Cuộn đọc (bấm để Vừa khung)'}
-          >
-            {viewMode === 'fit' ? <Eye className="w-3.5 h-3.5" /> : <ScrollText className="w-3.5 h-3.5" />}
-            <span className="text-[11px] font-medium hidden sm:inline">
-              {viewMode === 'fit' ? `Vừa khung (${Math.round(scale * 100)}%)` : 'Cuộn đọc'}
-            </span>
-            <span className="text-[11px] font-medium sm:hidden">
-              {viewMode === 'fit' ? 'Vừa khung' : 'Cuộn đọc'}
-            </span>
-          </button>
+          {isScreenShare ? (
+            /* Controls during active Screen Share */
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={onToggleNotes}
+                className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer ${
+                  isNotesOpen
+                    ? 'bg-[#83A58E] text-white'
+                    : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
+                }`}
+                title="Mở kịch bản người nói"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">Kịch bản</span>
+              </button>
 
-          {/* Laser Pointer */}
-          <button
-            onClick={() => setLaserActive(!laserActive)}
-            className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer ${
-              laserActive
-                ? 'bg-[#83A58E] text-white'
-                : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
-            }`}
-            title="Bật/Tắt con trỏ laser mô phỏng"
-          >
-            <MousePointer className="w-3.5 h-3.5" />
-            <span className="hidden md:inline text-[11px]">Con trỏ laser</span>
-          </button>
+              <button
+                onClick={onStopScreenShare}
+                className="px-2.5 py-1 rounded-md bg-[#873631] hover:bg-[#A33E37] text-white transition-colors text-xs flex items-center gap-1.5 cursor-pointer font-medium shadow-2xs"
+                title="Dừng chia sẻ màn hình và quay lại slide nội bộ"
+              >
+                <Square className="w-3 h-3 fill-current" />
+                <span className="text-[11px]">Dừng chia sẻ</span>
+              </button>
+            </div>
+          ) : (
+            /* Controls during Slide Viewer (PPTX / Demo) */
+            <>
+              {isPptx && (
+                <button
+                  onClick={onShareScreenClick}
+                  className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#253127] text-[#83A58E] hover:text-white hover:bg-[#314034] border border-[#37493A] transition-colors text-[11px] cursor-pointer"
+                  title="Chuyển sang Chia sẻ màn hình để chạy đầy đủ hiệu ứng PowerPoint"
+                >
+                  <Sparkles className="w-3 h-3 text-[#83A58E]" />
+                  <span>Chiếu có hiệu ứng</span>
+                </button>
+              )}
 
-          {/* Notes Drawer Toggle */}
-          <button
-            onClick={onToggleNotes}
-            className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer ${
-              isNotesOpen
-                ? 'bg-[#83A58E] text-white'
-                : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
-            }`}
-            title="Mở kịch bản người nói"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span className="hidden md:inline text-[11px]">Kịch bản</span>
-          </button>
+              {/* View mode toggle: Fit vs Scroll */}
+              <button
+                onClick={handleToggleViewMode}
+                className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'fit'
+                    ? 'bg-[#83A58E] text-white'
+                    : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
+                }`}
+                title={viewMode === 'fit' ? 'Đang ở chế độ Vừa khung (bấm để Cuộn đọc)' : 'Đang ở chế độ Cuộn đọc (bấm để Vừa khung)'}
+              >
+                {viewMode === 'fit' ? <Eye className="w-3.5 h-3.5" /> : <ScrollText className="w-3.5 h-3.5" />}
+                <span className="text-[11px] font-medium hidden sm:inline">
+                  {viewMode === 'fit' ? `Vừa khung (${Math.round(scale * 100)}%)` : 'Cuộn đọc'}
+                </span>
+                <span className="text-[11px] font-medium sm:hidden">
+                  {viewMode === 'fit' ? 'Vừa khung' : 'Cuộn đọc'}
+                </span>
+              </button>
 
-          {/* Share screen button (notice) */}
-          <button
-            onClick={onShareScreenClick}
-            className="p-1.5 rounded-md text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31] transition-colors text-xs flex items-center gap-1 cursor-pointer"
-            title="Chia sẻ màn hình (Tính năng Đợt 2)"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline text-[11px]">Chia sẻ</span>
-          </button>
+              {/* Laser Pointer */}
+              <button
+                onClick={() => setLaserActive(!laserActive)}
+                className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer ${
+                  laserActive
+                    ? 'bg-[#83A58E] text-white'
+                    : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
+                }`}
+                title="Bật/Tắt con trỏ laser mô phỏng"
+              >
+                <MousePointer className="w-3.5 h-3.5" />
+                <span className="hidden md:inline text-[11px]">Con trỏ laser</span>
+              </button>
+
+              {/* Notes Drawer Toggle */}
+              <button
+                onClick={onToggleNotes}
+                className={`p-1.5 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer ${
+                  isNotesOpen
+                    ? 'bg-[#83A58E] text-white'
+                    : 'text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31]'
+                }`}
+                title="Mở kịch bản người nói"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden md:inline text-[11px]">Kịch bản</span>
+              </button>
+
+              {/* Share screen button */}
+              <button
+                onClick={onShareScreenClick}
+                className="p-1.5 rounded-md text-[#A8B6AB] hover:text-white hover:bg-[#2E3A31] transition-colors text-xs flex items-center gap-1 cursor-pointer"
+                title="Chia sẻ màn hình PowerPoint có hiệu ứng (Đợt 2.3)"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline text-[11px]">Chia sẻ</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Optional Mode A (PPTX) Tip banner for Animation/Transition */}
+      {isPptx && !isScreenShare && showPptxEffectTip && (
+        <div className="bg-[#242F27] border-b border-[#324235] px-3 md:px-4 py-1.5 flex items-center justify-between text-[11px] text-[#A8B6AB] shrink-0 z-10">
+          <div className="flex items-center gap-2 min-w-0">
+            <Info className="w-3.5 h-3.5 text-[#83A58E] shrink-0" />
+            <span className="truncate">
+              Chế độ này hiển thị chính xác nội dung nhưng chưa hỗ trợ đầy đủ hiệu ứng PowerPoint. Để sử dụng hiệu ứng gốc (Animation & Transition), hãy chọn{' '}
+              <button
+                onClick={onShareScreenClick}
+                className="text-[#83A58E] font-semibold underline hover:text-white cursor-pointer ml-1"
+              >
+                Chia sẻ màn hình
+              </button>
+              .
+            </span>
+          </div>
+          <button
+            onClick={() => setShowPptxEffectTip(false)}
+            className="text-[#768078] hover:text-white px-1.5 py-0.5 rounded cursor-pointer shrink-0 ml-2 text-[10px]"
+            title="Đóng thông báo"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
 
       {/* 2. Slide Canvas Stage */}
       <div
         ref={containerRef}
         className="flex-1 relative w-full h-full min-h-0 flex items-center justify-center overflow-hidden bg-[#1F2621]"
       >
-        {viewMode === 'fit' ? (
-          /* "VỪA KHUNG" MODE: Mathematical 2-axis proportional scaling to guarantee 100% visibility */
-          <div
-            style={{
-              width: `${Math.round(SLIDE_BASE_WIDTH * scale)}px`,
-              height: `${Math.round(SLIDE_BASE_HEIGHT * scale)}px`,
-              position: 'relative',
-              flexShrink: 0,
-              maxWidth: '100%',
-              maxHeight: '100%',
-            }}
-          >
+        {isScreenShare ? (
+          /* ================= SCREEN SHARE STAGE (PHASE 2.3) ================= */
+          <div className="w-full h-full p-2 sm:p-3 flex flex-col items-center justify-center relative min-h-0">
+            <div className="w-full h-full max-w-full max-h-full flex items-center justify-center relative rounded-xl overflow-hidden shadow-2xl bg-black border border-[#2D3930]">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-contain"
+              />
+
+              {/* Floating Live Helper Overlay */}
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#171F19]/90 backdrop-blur-md border border-[#354638] text-white px-3.5 py-1.5 rounded-full text-[11px] flex items-center gap-2 shadow-lg pointer-events-none max-w-[92%]">
+                <span className="w-2 h-2 rounded-full bg-[#83A58E] animate-ping shrink-0" />
+                <span className="truncate">
+                  Đang phát trực tiếp từ PowerPoint · Điều khiển phím chuyển slide trên PowerPoint của bạn
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : isPptx ? (
+          /* ================= REAL PPTX RENDERING STAGE ================= */
+          isLoadingPptx ? (
+            /* Loading State while @web-ppt/core parses and renders */
+            <div className="p-6 md:p-8 rounded-2xl bg-[#1A221C] border border-[#2D3930] text-center max-w-md mx-auto space-y-3 shadow-xl">
+              <div className="w-10 h-10 mx-auto border-3 border-[#83A58E] border-t-transparent rounded-full animate-spin" />
+              <h4 className="text-sm font-bold text-white">Đang chuẩn bị bài trình chiếu...</h4>
+              <p className="text-xs text-[#A8B6AB] break-all">
+                Đang giải mã slide thật từ tệp: <strong className="text-white">{presentationSource.name}</strong>
+              </p>
+              <div className="p-2.5 rounded-lg bg-[#242E26] border border-[#2E3B30] text-[11px] text-[#83A58E] flex items-center justify-center gap-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Trình chiếu Open XML không máy chủ · Xử lý an toàn trên trình duyệt</span>
+              </div>
+            </div>
+          ) : pptxError ? (
+            /* Error State if parsing fails */
+            <div className="p-6 rounded-2xl bg-[#261B1B] border border-[#4D2826] text-center max-w-md mx-auto space-y-3">
+              <AlertCircle className="w-8 h-8 text-[#E5484D] mx-auto" />
+              <h4 className="text-sm font-bold text-white">Không thể hiển thị slide PowerPoint</h4>
+              <p className="text-xs text-[#ECA9A7] leading-relaxed">{pptxError}</p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                {onSwitchToDemo && (
+                  <button
+                    onClick={onSwitchToDemo}
+                    className="px-3 py-1.5 text-xs rounded-lg bg-[#83A58E] text-white font-medium hover:bg-[#6F917A] cursor-pointer"
+                  >
+                    Dùng slide mẫu diễn tập
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : viewMode === 'fit' ? (
+            /* "VỪA KHUNG" MODE FOR REAL PPTX: Exact 2-axis proportional scaling */
             <div
-              onMouseMove={handleSlideMouseMove}
               style={{
-                width: `${SLIDE_BASE_WIDTH}px`,
-                height: `${SLIDE_BASE_HEIGHT}px`,
-                transform: `scale(${scale})`,
-                transformOrigin: 'top left',
+                width: `${Math.round(activeSlideWidth * scale)}px`,
+                height: `${Math.round(activeSlideHeight * scale)}px`,
+                position: 'relative',
+                flexShrink: 0,
+                maxWidth: '100%',
+                maxHeight: '100%',
               }}
-              className="bg-white rounded-xl shadow-2xl p-6 flex flex-col justify-between border border-[#E4E9E3] text-[#3D4740] select-none overflow-hidden absolute top-0 left-0"
             >
-              {/* Slide Header */}
-              <div className="shrink-0">
-                <div className="flex items-center justify-between text-xs text-[#768078] pb-2 border-b border-[#E4E9E3]">
-                  <span className="font-semibold text-[#4A6453] uppercase tracking-wider text-[11px]">
-                    SpeakLab AI · Nghiên cứu Khoa học 2026
-                  </span>
-                  <span className="tabular-nums font-mono text-[11px] font-semibold text-[#3D4740]">
-                    Slide {currentSlide.slideNumber} / {slides.length}
-                  </span>
-                </div>
+              <div
+                onMouseMove={handleSlideMouseMove}
+                style={{
+                  width: `${activeSlideWidth}px`,
+                  height: `${activeSlideHeight}px`,
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }}
+                className="bg-white rounded-xl shadow-2xl border border-[#E4E9E3] select-none overflow-hidden absolute top-0 left-0 [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
+                dangerouslySetInnerHTML={{ __html: pptxSvg || '' }}
+              />
 
-                <h2 className="text-xl font-bold text-[#3D4740] mt-2 tracking-tight leading-snug">
-                  {currentSlide.title}
-                </h2>
-                {currentSlide.subtitle && (
-                  <p className="text-xs text-[#768078] mt-0.5 font-medium leading-relaxed">
-                    {currentSlide.subtitle}
-                  </p>
-                )}
-              </div>
-
-              {/* Slide Body: 2 columns with generous breathing room */}
-              <div className="grid grid-cols-2 gap-5 my-auto py-2 items-center flex-1 min-h-0">
-                {/* Left Column: Points and Highlight */}
-                <div className="space-y-2.5">
-                  {currentSlide.contentPoints.map((point, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-xs text-[#444F47]">
-                      <CheckCircle2 className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
-                      <span className="leading-relaxed font-medium">{point}</span>
-                    </div>
-                  ))}
-
-                  {currentSlide.keyHighlight && (
-                    <div className="mt-3 p-3 rounded-lg bg-[#EEF4F0] border border-[#D9E5DC] text-xs font-semibold text-[#2A4433] leading-relaxed">
-                      💡 {currentSlide.keyHighlight}
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Column: Visual Graphic */}
-                <div className="h-full flex flex-col justify-center">
-                  {renderVisualGraphic(currentSlide.visualGraphicType, true)}
-                </div>
-              </div>
-
-              {/* Slide Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#E4E9E3] text-[11px] text-[#768078] shrink-0 mt-auto">
-                <span className="truncate max-w-[420px]">
-                  Người trình bày: Nguyễn Minh Quân · Lớp 11A1 chuyên Tin
-                </span>
-                <span className="shrink-0 font-medium text-[#4A6453]">Phòng họp SpeakLab AI</span>
-              </div>
-
-              {/* Laser pointer dot */}
+              {/* Laser pointer dot on scaled surface */}
               {laserActive && (
                 <div
                   style={{
@@ -410,69 +613,24 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
                 />
               )}
             </div>
-          </div>
-        ) : (
-          /* "CUỘN ĐỌC" MODE: Vertical document view allowing manual scroll */
-          <div
-            ref={scrollContainerRef}
-            className="w-full h-full overflow-y-auto p-3 sm:p-5 flex flex-col items-center"
-          >
+          ) : (
+            /* "CUỘN ĐỌC" MODE FOR REAL PPTX: Scrollable natural reading mode */
             <div
-              onMouseMove={handleSlideMouseMove}
-              className="w-full max-w-3xl bg-white rounded-xl shadow-xl p-5 sm:p-7 flex flex-col gap-4 border border-[#E4E9E3] text-[#3D4740] select-none relative my-auto"
+              ref={scrollContainerRef}
+              className="w-full h-full overflow-y-auto p-3 sm:p-5 flex flex-col items-center"
             >
-              {/* Slide Header */}
-              <div>
-                <div className="flex items-center justify-between text-xs text-[#768078] pb-2 border-b border-[#E4E9E3]">
-                  <span className="font-semibold text-[#4A6453] uppercase tracking-wider text-[10px]">
-                    SpeakLab AI · Nghiên cứu Khoa học 2026
-                  </span>
-                  <span className="tabular-nums font-mono text-[11px] font-semibold text-[#3D4740]">
-                    Slide {currentSlide.slideNumber} / {slides.length}
-                  </span>
-                </div>
+              <div
+                onMouseMove={handleSlideMouseMove}
+                style={{
+                  maxWidth: '1020px',
+                  width: '100%',
+                  aspectRatio: `${activeSlideWidth} / ${activeSlideHeight}`,
+                }}
+                className="bg-white rounded-xl shadow-xl overflow-hidden border border-[#E4E9E3] my-auto relative [&>svg]:w-full [&>svg]:h-full [&>svg]:block"
+                dangerouslySetInnerHTML={{ __html: pptxSvg || '' }}
+              />
 
-                <h2 className="text-lg sm:text-xl font-bold text-[#3D4740] mt-2.5 tracking-tight leading-snug">
-                  {currentSlide.title}
-                </h2>
-                {currentSlide.subtitle && (
-                  <p className="text-xs sm:text-sm text-[#768078] mt-1 font-medium leading-relaxed">
-                    {currentSlide.subtitle}
-                  </p>
-                )}
-              </div>
-
-              {/* Slide Body */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
-                <div className="space-y-2.5">
-                  {currentSlide.contentPoints.map((point, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-[#444F47]">
-                      <CheckCircle2 className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
-                      <span className="leading-relaxed font-medium">{point}</span>
-                    </div>
-                  ))}
-
-                  {currentSlide.keyHighlight && (
-                    <div className="mt-3 p-3 rounded-lg bg-[#EEF4F0] border border-[#D9E5DC] text-xs font-semibold text-[#2A4433] leading-relaxed">
-                      💡 {currentSlide.keyHighlight}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  {renderVisualGraphic(currentSlide.visualGraphicType, false)}
-                </div>
-              </div>
-
-              {/* Slide Footer */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-[#E4E9E3] text-[10px] text-[#768078] mt-2">
-                <span className="truncate max-w-[280px]">
-                  Người trình bày: Nguyễn Minh Quân · Lớp 11A1 chuyên Tin
-                </span>
-                <span className="shrink-0 font-medium text-[#4A6453]">Phòng họp SpeakLab AI</span>
-              </div>
-
-              {/* Laser pointer dot */}
+              {/* Laser pointer in scroll mode */}
               {laserActive && (
                 <div
                   style={{
@@ -484,49 +642,238 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
                 />
               )}
             </div>
-          </div>
+          )
+        ) : (
+          /* ================= DEMO SLIDE STAGE (PHASE 1) ================= */
+          viewMode === 'fit' ? (
+            /* "VỪA KHUNG" MODE: Mathematical 2-axis proportional scaling to guarantee 100% visibility */
+            <div
+              style={{
+                width: `${Math.round(DEFAULT_SLIDE_WIDTH * scale)}px`,
+                height: `${Math.round(DEFAULT_SLIDE_HEIGHT * scale)}px`,
+                position: 'relative',
+                flexShrink: 0,
+                maxWidth: '100%',
+                maxHeight: '100%',
+              }}
+            >
+              <div
+                onMouseMove={handleSlideMouseMove}
+                style={{
+                  width: `${DEFAULT_SLIDE_WIDTH}px`,
+                  height: `${DEFAULT_SLIDE_HEIGHT}px`,
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }}
+                className="bg-white rounded-xl shadow-2xl p-6 flex flex-col justify-between border border-[#E4E9E3] text-[#3D4740] select-none overflow-hidden absolute top-0 left-0"
+              >
+                {/* Slide Header */}
+                <div className="shrink-0">
+                  <div className="flex items-center justify-between text-xs text-[#768078] pb-2 border-b border-[#E4E9E3]">
+                    <span className="font-semibold text-[#4A6453] uppercase tracking-wider text-[11px]">
+                      SpeakLab AI · Nghiên cứu Khoa học 2026
+                    </span>
+                    <span className="tabular-nums font-mono text-[11px] font-semibold text-[#3D4740]">
+                      Slide {currentDemoSlide.slideNumber} / {slides.length}
+                    </span>
+                  </div>
+
+                  <h2 className="text-xl font-bold text-[#3D4740] mt-2 tracking-tight leading-snug">
+                    {currentDemoSlide.title}
+                  </h2>
+                  {currentDemoSlide.subtitle && (
+                    <p className="text-xs text-[#768078] mt-0.5 font-medium leading-relaxed">
+                      {currentDemoSlide.subtitle}
+                    </p>
+                  )}
+                </div>
+
+                {/* Slide Body: 2 columns with generous breathing room */}
+                <div className="grid grid-cols-2 gap-5 my-auto py-2 items-center flex-1 min-h-0">
+                  {/* Left Column: Points and Highlight */}
+                  <div className="space-y-2.5">
+                    {currentDemoSlide.contentPoints.map((point, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5 text-xs text-[#444F47]">
+                        <CheckCircle2 className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
+                        <span className="leading-relaxed font-medium">{point}</span>
+                      </div>
+                    ))}
+
+                    {currentDemoSlide.keyHighlight && (
+                      <div className="mt-3 p-3 rounded-lg bg-[#EEF4F0] border border-[#D9E5DC] text-xs font-semibold text-[#2A4433] leading-relaxed">
+                        💡 {currentDemoSlide.keyHighlight}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Visual Graphic */}
+                  <div className="h-full flex flex-col justify-center">
+                    {renderVisualGraphic(currentDemoSlide.visualGraphicType)}
+                  </div>
+                </div>
+
+                {/* Slide Footer */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#E4E9E3] text-[11px] text-[#768078] shrink-0 mt-auto">
+                  <span className="truncate max-w-[420px]">
+                    Người trình bày: Nguyễn Minh Quân · Lớp 11A1 chuyên Tin
+                  </span>
+                  <span className="shrink-0 font-medium text-[#4A6453]">Phòng họp SpeakLab AI</span>
+                </div>
+
+                {/* Laser pointer dot */}
+                {laserActive && (
+                  <div
+                    style={{
+                      left: `${laserPos.x}%`,
+                      top: `${laserPos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    className="absolute w-4 h-4 rounded-full bg-[#E5484D] shadow-[0_0_14px_#E5484D] pointer-events-none transition-transform duration-75 z-30 ring-2 ring-white/60"
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            /* "CUỘN ĐỌC" MODE: Vertical document view allowing manual scroll */
+            <div
+              ref={scrollContainerRef}
+              className="w-full h-full overflow-y-auto p-3 sm:p-5 flex flex-col items-center"
+            >
+              <div
+                onMouseMove={handleSlideMouseMove}
+                className="w-full max-w-3xl bg-white rounded-xl shadow-xl p-5 sm:p-7 flex flex-col gap-4 border border-[#E4E9E3] text-[#3D4740] select-none relative my-auto"
+              >
+                {/* Slide Header */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-[#768078] pb-2 border-b border-[#E4E9E3]">
+                    <span className="font-semibold text-[#4A6453] uppercase tracking-wider text-[10px]">
+                      SpeakLab AI · Nghiên cứu Khoa học 2026
+                    </span>
+                    <span className="tabular-nums font-mono text-[11px] font-semibold text-[#3D4740]">
+                      Slide {currentDemoSlide.slideNumber} / {slides.length}
+                    </span>
+                  </div>
+
+                  <h2 className="text-lg sm:text-xl font-bold text-[#3D4740] mt-2.5 tracking-tight leading-snug">
+                    {currentDemoSlide.title}
+                  </h2>
+                  {currentDemoSlide.subtitle && (
+                    <p className="text-xs sm:text-sm text-[#768078] mt-1 font-medium leading-relaxed">
+                      {currentDemoSlide.subtitle}
+                    </p>
+                  )}
+                </div>
+
+                {/* Slide Body */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
+                  <div className="space-y-2.5">
+                    {currentDemoSlide.contentPoints.map((point, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-[#444F47]">
+                        <CheckCircle2 className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
+                        <span className="leading-relaxed font-medium">{point}</span>
+                      </div>
+                    ))}
+
+                    {currentDemoSlide.keyHighlight && (
+                      <div className="mt-3 p-3 rounded-lg bg-[#EEF4F0] border border-[#D9E5DC] text-xs font-semibold text-[#2A4433] leading-relaxed">
+                        💡 {currentDemoSlide.keyHighlight}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    {renderVisualGraphic(currentDemoSlide.visualGraphicType)}
+                  </div>
+                </div>
+
+                {/* Slide Footer */}
+                <div className="flex items-center justify-between pt-2.5 border-t border-[#E4E9E3] text-[10px] text-[#768078] mt-2">
+                  <span className="truncate max-w-[280px]">
+                    Người trình bày: Nguyễn Minh Quân · Lớp 11A1 chuyên Tin
+                  </span>
+                  <span className="shrink-0 font-medium text-[#4A6453]">Phòng họp SpeakLab AI</span>
+                </div>
+
+                {/* Laser pointer dot */}
+                {laserActive && (
+                  <div
+                    style={{
+                      left: `${laserPos.x}%`,
+                      top: `${laserPos.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    className="absolute w-4 h-4 rounded-full bg-[#E5484D] shadow-[0_0_14px_#E5484D] pointer-events-none transition-transform duration-75 z-30 ring-2 ring-white/60"
+                  />
+                )}
+              </div>
+            </div>
+          )
         )}
       </div>
 
       {/* 3. Bottom Slide Navigation Bar */}
-      <div className="h-12 bg-[#242C26] border-t border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs shrink-0">
-        <button
-          onClick={onPrevSlide}
-          disabled={currentSlideIndex === 0}
-          className="px-3 py-1.5 rounded-lg bg-[#2E3A31] hover:bg-[#3B4A3F] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
-          title="Về slide trước"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span className="hidden sm:inline">Slide trước</span>
-        </button>
+      {isScreenShare ? (
+        <div className="h-12 bg-[#242C26] border-t border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs shrink-0">
+          <div className="flex items-center gap-2 text-[#A8B6AB] text-[11px]">
+            <span className="w-2 h-2 rounded-full bg-[#83A58E] animate-pulse" />
+            <span className="font-semibold text-white">Chế độ chia sẻ cửa sổ PowerPoint</span>
+            <span className="hidden sm:inline text-[#768078]">· Hiệu ứng thời gian thực</span>
+          </div>
 
-        {/* Slide Thumbnail Dots */}
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-none py-1">
-          {slides.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => onSelectSlide(idx)}
-              className={`w-7 h-6 rounded flex items-center justify-center font-mono text-[11px] transition-all cursor-pointer shrink-0 ${
-                currentSlideIndex === idx
-                  ? 'bg-[#83A58E] text-white font-bold ring-1 ring-white/30'
-                  : 'bg-[#2E3A31] text-[#A8B6AB] hover:text-white hover:bg-[#3B4A3F]'
-              }`}
-            >
-              {idx + 1}
-            </button>
-          ))}
+          <div className="text-[11px] text-[#A8B6AB] hidden md:block text-center truncate max-w-sm">
+            Thao tác chuyển slide và kích hoạt hiệu ứng trực tiếp trên PowerPoint của bạn
+          </div>
+
+          <button
+            onClick={onStopScreenShare}
+            className="px-3 py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white flex items-center gap-1.5 font-medium transition-colors cursor-pointer min-h-[36px]"
+            title="Dừng chia sẻ màn hình"
+          >
+            <Square className="w-3.5 h-3.5 fill-current" />
+            <span>Dừng chia sẻ</span>
+          </button>
         </div>
+      ) : (
+        <div className="h-12 bg-[#242C26] border-t border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs shrink-0">
+          <button
+            onClick={onPrevSlide}
+            disabled={currentSlideIndex === 0}
+            className="px-3 py-1.5 rounded-lg bg-[#2E3A31] hover:bg-[#3B4A3F] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            title="Về slide trước"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Slide trước</span>
+          </button>
 
-        <button
-          onClick={onNextSlide}
-          disabled={currentSlideIndex === slides.length - 1}
-          className="px-3 py-1.5 rounded-lg bg-[#83A58E] hover:bg-[#6F917A] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 font-semibold transition-colors cursor-pointer min-h-[36px]"
-          title="Chuyển slide tiếp theo"
-        >
-          <span className="hidden sm:inline">Slide sau</span>
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
+          {/* Slide Thumbnail / Number Buttons */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-xs md:max-w-md py-1 scrollbar-thin">
+            {Array.from({ length: totalEffectiveSlides }, (_, idx) => (
+              <button
+                key={idx}
+                onClick={() => onSelectSlide(idx)}
+                className={`w-7 h-6 rounded flex items-center justify-center font-mono text-[11px] transition-all cursor-pointer shrink-0 ${
+                  currentSlideIndex === idx
+                    ? 'bg-[#83A58E] text-white font-bold ring-1 ring-white/30'
+                    : 'bg-[#2E3A31] text-[#A8B6AB] hover:text-white hover:bg-[#3B4A3F]'
+                }`}
+                title={`Chuyển đến Slide ${idx + 1}`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={onNextSlide}
+            disabled={currentSlideIndex >= totalEffectiveSlides - 1}
+            className="px-3 py-1.5 rounded-lg bg-[#83A58E] hover:bg-[#6F917A] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 font-semibold transition-colors cursor-pointer min-h-[36px]"
+            title="Chuyển slide tiếp theo"
+          >
+            <span className="hidden sm:inline">Slide sau</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

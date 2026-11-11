@@ -24,10 +24,13 @@ import {
   PracticeModeType,
   PracticeMode,
   PresentationDeck,
-  PracticeSetupConfig
+  PracticeSetupConfig,
+  PresentationSource
 } from '../types';
 import { Button } from '../components/ui/Button';
 import { DemoNotice } from '../components/ui/DemoNotice';
+import { PptxUploader } from '../features/presentation/PptxUploader';
+import { pptxSessionStore } from '../services/pptxService';
 
 interface PracticeSetupPageProps {
   availableModes: PracticeMode[];
@@ -62,7 +65,31 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
     initialConfig?.durationMinutes || 12
   );
   const [expandedMobileModeId, setExpandedMobileModeId] = useState<PracticeModeType | null>(null);
-  const [showUploadNotice, setShowUploadNotice] = useState(false);
+
+  // Active Presentation Source: Demo vs PPTX
+  const [presentationSource, setPresentationSource] = useState<PresentationSource>(() => {
+    if (initialConfig?.presentationSource) {
+      return initialConfig.presentationSource;
+    }
+    const storedPptx = pptxSessionStore.getPptx();
+    if (storedPptx) {
+      return {
+        type: 'pptx',
+        pptxInfo: storedPptx,
+        name: storedPptx.name,
+        slideCount: storedPptx.slideCount,
+        status: 'ready',
+      };
+    }
+    const defaultDeck = availableDecks[0];
+    return {
+      type: 'demo',
+      deckId: defaultDeck?.id || 'deck_ai_waste',
+      name: defaultDeck?.title || 'Slide mẫu',
+      slideCount: defaultDeck?.slides.length || 6,
+      status: 'ready',
+    };
+  });
 
   // Sync back to parent whenever config changes so returning to this page retains choices
   useEffect(() => {
@@ -73,14 +100,37 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
         deckId: selectedDeckId,
         participantCount,
         durationMinutes,
+        presentationSource,
       });
     }
-  }, [sessionTitle, selectedModeId, selectedDeckId, participantCount, durationMinutes, onConfigChange]);
+  }, [sessionTitle, selectedModeId, selectedDeckId, participantCount, durationMinutes, presentationSource, onConfigChange]);
 
   const selectedMode =
     availableModes.find((m) => m.id === selectedModeId) || availableModes[0];
   const selectedDeck =
     availableDecks.find((d) => d.id === selectedDeckId) || availableDecks[0];
+
+  const handleSelectDemoDeck = (deck: PresentationDeck) => {
+    setSelectedDeckId(deck.id);
+    const newSource: PresentationSource = {
+      type: 'demo',
+      deckId: deck.id,
+      name: deck.title,
+      slideCount: deck.slides.length,
+      status: 'ready',
+    };
+    setPresentationSource(newSource);
+    pptxSessionStore.setDemoSource(deck.id, deck.title, deck.slides.length);
+  };
+
+  const handlePptxSourceChange = (newSource: PresentationSource) => {
+    setPresentationSource(newSource);
+    // If current title is default, suggest clean title from PPTX filename
+    if (sessionTitle === 'Bảo vệ Đề tài: Phân loại Rác Thông minh bằng AI') {
+      const cleanName = newSource.name.replace(/\.pptx$/i, '').replace(/[_-]/g, ' ');
+      setSessionTitle(`Thuyết trình: ${cleanName}`);
+    }
+  };
 
   const handleStart = () => {
     onStartSession({
@@ -89,6 +139,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
       deckId: selectedDeckId,
       participantCount,
       durationMinutes,
+      presentationSource,
     });
   };
 
@@ -306,85 +357,107 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
         </div>
 
         {/* Section 3: Presentation Deck Preparation */}
-        <div className="pt-6 border-t border-[#E4E9E3]">
-          <div className="flex items-center justify-between mb-4">
+        <div className="pt-6 border-t border-[#E4E9E3] space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h3 className="text-base md:text-lg font-bold text-[#3D4740]">
                 3. Tài liệu trình chiếu
               </h3>
               <p className="text-xs text-[#768078] mt-0.5">
-                Chọn bộ slide mẫu hoặc xem trước khu vực tải tệp trình chiếu
+                Chọn bộ slide mẫu hoặc tải lên tệp PowerPoint (.pptx) cá nhân từ thiết bị của bạn
               </p>
             </div>
-            <span className="text-xs font-semibold text-[#4A6453] bg-[#EEF4F0] px-2.5 py-1 rounded-md border border-[#D9E5DC]">
-              Đang chọn: {selectedDeck.slides.length} trang slide
-            </span>
+
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${
+                presentationSource.type === 'pptx'
+                  ? 'text-[#2A4433] bg-[#EEF4F0] border-[#83A58E]'
+                  : 'text-[#4A6453] bg-[#EEF4F0] border-[#D9E5DC]'
+              }`}>
+                {presentationSource.type === 'pptx'
+                  ? `Đang chọn: PowerPoint cá nhân (${presentationSource.slideCount} slides)`
+                  : `Đang chọn: Slide mẫu (${selectedDeck.slides.length} slides)`}
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {availableDecks.map((deck) => {
-              const isDeckSelected = selectedDeckId === deck.id;
-              return (
-                <div
-                  key={deck.id}
-                  onClick={() => setSelectedDeckId(deck.id)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                    isDeckSelected
-                      ? 'bg-[#EEF4F0] border-[#83A58E] ring-1 ring-[#83A58E]'
-                      : 'bg-white border-[#E4E9E3] hover:bg-[#F7F9F6]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-[#4A6453] bg-white px-2 py-0.5 rounded border border-[#D9E5DC]">
-                      {deck.category}
-                    </span>
-                    <span className="text-xs text-[#768078]">
-                      {deck.slides.length} slides
-                    </span>
+          {/* Sub-section A: Available Demo Decks */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#3D4740] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#83A58E]" />
+                Nguồn 1: Các bộ slide mẫu có sẵn
+              </span>
+              <span className="text-[11px] text-[#768078]">
+                {availableDecks.length} bộ đề tài
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {availableDecks.map((deck) => {
+                const isDeckSelected = presentationSource.type === 'demo' && selectedDeckId === deck.id;
+                return (
+                  <div
+                    key={deck.id}
+                    onClick={() => handleSelectDemoDeck(deck)}
+                    className={`p-3.5 md:p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      isDeckSelected
+                        ? 'bg-[#EEF4F0] border-[#83A58E] ring-1 ring-[#83A58E] shadow-2xs'
+                        : 'bg-white border-[#E4E9E3] hover:bg-[#F7F9F6] hover:border-[#83A58E]/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-[#4A6453] bg-white px-2 py-0.5 rounded border border-[#D9E5DC]">
+                          {deck.category}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-[#768078]">
+                            {deck.slides.length} slides
+                          </span>
+                          {isDeckSelected && (
+                            <span className="w-2 h-2 rounded-full bg-[#83A58E]" />
+                          )}
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-bold text-[#3D4740]">
+                        {deck.title}
+                      </h4>
+                      <p className="text-xs text-[#768078] mt-1 leading-relaxed line-clamp-2">
+                        {deck.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-[#E4E9E3]/70 flex items-center justify-between text-[11px] text-[#768078]">
+                      <span>{deck.slides[0]?.title}</span>
+                      <span className="font-medium text-[#4A6453]">
+                        {isDeckSelected ? 'Đang chọn' : 'Bấm để chọn'}
+                      </span>
+                    </div>
                   </div>
-                  <h4 className="text-sm font-bold text-[#3D4740]">
-                    {deck.title}
-                  </h4>
-                  <p className="text-xs text-[#768078] mt-1 leading-relaxed line-clamp-2">
-                    {deck.description}
-                  </p>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          {/* Upload Placeholder for Phase 2 */}
-          <div
-            onClick={() => setShowUploadNotice(!showUploadNotice)}
-            className="border-2 border-dashed border-[#D9E5DC] rounded-xl p-5 md:p-6 text-center hover:bg-[#F7F9F6] transition-colors cursor-pointer group"
-          >
-            <div className="w-10 h-10 rounded-full bg-[#EEF4F0] text-[#4A6453] flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform">
-              <Upload className="w-5 h-5" />
+          {/* Sub-section B: Real PowerPoint Upload (Phase 2.1) */}
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#3D4740] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#83A58E]" />
+                Nguồn 2: Tải lên tệp PowerPoint (.pptx) cá nhân
+              </span>
+              <span className="text-[11px] font-semibold text-[#4A6453] bg-[#EEF4F0] px-2 py-0.5 rounded border border-[#D9E5DC]">
+                Đợt 2.1 Mới
+              </span>
             </div>
-            <p className="text-xs font-semibold text-[#3D4740]">
-              Tải lên tệp slide PowerPoint (.pptx) hoặc PDF của bạn
-            </p>
-            <p className="text-[11px] text-[#768078] mt-1">
-              Tính năng dự kiến Đợt 2 · Hiện tại hệ thống sử dụng các bộ slide mẫu phong phú có sẵn
-            </p>
-            <span className="inline-block mt-2 text-[10px] font-medium text-[#556057] bg-white px-2.5 py-0.5 rounded border border-[#E4E9E3]">
-              Bấm để xem thông tin tính năng
-            </span>
-          </div>
 
-          {showUploadNotice && (
-            <div className="mt-3 p-3 rounded-lg bg-[#FAFBF9] border border-[#E4E9E3] text-xs text-[#556057] flex items-start gap-2 animate-in fade-in">
-              <Info className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-[#3D4740]">
-                  Ghi chú phạm vi Đợt 1
-                </p>
-                <p className="mt-0.5 text-[#768078]">
-                  Để đảm bảo tính độc lập và kiểm thử UI/UX mượt mà, ở Đợt 1 bạn có thể sử dụng các bộ slide mẫu tương tác đầy đủ đã được tích hợp sẵn phía trên. Trình parser tệp PPTX/PDF trực tiếp từ máy tính sẽ được bổ sung ở Đợt 2 mà không tạo hành vi upload giả.
-                </p>
-              </div>
-            </div>
-          )}
+            <PptxUploader
+              currentSource={presentationSource}
+              onSourceChange={handlePptxSourceChange}
+              onDeckSelectRequested={() => handleSelectDemoDeck(selectedDeck)}
+            />
+          </div>
         </div>
 
         {/* Action Buttons */}

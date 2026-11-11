@@ -59,6 +59,29 @@ export interface PresentationDeck {
   slides: PresentationSlide[];
 }
 
+export interface PptxDocumentInfo {
+  file: File;
+  name: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  slideCount: number;
+  parsedAt: string;
+  status: 'valid' | 'invalid';
+}
+
+export type PresentationSourceType = 'demo' | 'pptx' | 'screenShare';
+
+export interface PresentationSource {
+  type: PresentationSourceType;
+  deckId?: string;
+  pptxInfo?: PptxDocumentInfo;
+  name: string;
+  slideCount: number;
+  status: 'ready' | 'validating' | 'error';
+  error?: string;
+  stream?: MediaStream;
+}
+
 export interface PracticeSession {
   id: string;
   title: string;
@@ -72,6 +95,7 @@ export interface PracticeSession {
   status: 'completed' | 'in_progress' | 'draft';
   score?: number;
   reportId?: string;
+  presentationSource?: PresentationSource;
 }
 
 export interface EvaluationTimelineEvent {
@@ -134,6 +158,7 @@ export interface PracticeSetupConfig {
   deckId: string;
   participantCount: number;
   durationMinutes: number;
+  presentationSource?: PresentationSource;
 }
 
 export type ActivePage = 
