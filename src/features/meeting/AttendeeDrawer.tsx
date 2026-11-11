@@ -45,7 +45,7 @@ export const AttendeeDrawer: React.FC<AttendeeDrawerProps> = ({
       : participants;
 
   return (
-    <div className="w-80 md:w-96 bg-[#1F2621] border-l border-[#2E3A31] flex flex-col h-full shadow-2xl z-20 animate-in slide-in-from-right duration-200">
+    <div className="absolute inset-y-0 right-0 lg:relative w-80 md:w-96 max-w-[90vw] bg-[#1F2621] border-l border-[#2E3A31] flex flex-col h-full shadow-2xl z-40 lg:z-20 animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="h-14 px-4 border-b border-[#2E3A31] flex items-center justify-between text-white">
         <div className="flex items-center gap-2">

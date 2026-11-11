@@ -36,6 +36,7 @@ import { ScreenShareGuideModal } from '../features/meeting/ScreenShareGuideModal
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { pptxSessionStore } from '../services/pptxService';
+import { screenShareService } from '../services/screenShareService';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -66,7 +67,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(145); // start with realistic ~2m25s demo time
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
-  // Screen Share State (Phase 2.3)
+  // Screen Share State (Phase 2.3 & 2.4)
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [previousSource, setPreviousSource] = useState<PresentationSource | undefined>(undefined);
@@ -88,15 +89,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
   // Stop Screen Share handler
   const handleStopScreenShare = () => {
-    if (screenStream) {
-      screenStream.getTracks().forEach((track) => {
-        try {
-          track.stop();
-        } catch (e) {
-          console.error('Error stopping screen track:', e);
-        }
-      });
-    }
+    screenShareService.stopShare(screenStream);
     setScreenStream(null);
     setIsScreenSharing(false);
 
@@ -119,22 +112,14 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const handleStartScreenShare = async () => {
     setShowShareGuideModal(false);
 
-    // Feature detection
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      setShareError(
-        'Trình duyệt hoặc thiết bị của bạn không hỗ trợ Web Screen Capture API. Để chia sẻ màn hình PowerPoint có hiệu ứng, vui lòng sử dụng trình duyệt Google Chrome hoặc Microsoft Edge trên máy tính.'
-      );
+    const capability = screenShareService.getCapability();
+    if (!capability.isSupported) {
+      setShareError(capability.friendlyNotice);
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: 'always',
-          displaySurface: 'window',
-        } as any,
-        audio: false,
-      });
+      const stream = await screenShareService.startShare();
 
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
@@ -159,10 +144,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         // User closed or dismissed the browser picker
         console.log('Người dùng đã đóng hộp thoại chia sẻ màn hình.');
       } else {
+        const msg = err instanceof Error ? err.message : capability.friendlyNotice;
         console.error('Lỗi khi kích hoạt Screen Capture:', err);
-        setShareError(
-          'Không thể khởi động chia sẻ màn hình. Nếu bạn đang chạy ứng dụng trong khung nhúng (iframe), trình duyệt có thể áp dụng chính sách bảo mật hạn chế chia sẻ màn hình. Bạn có thể mở ứng dụng trên tab trình duyệt độc lập hoặc tiếp tục luyện tập bằng Chế độ PPTX nội bộ.'
-        );
+        setShareError(msg);
       }
     }
   };
@@ -219,11 +203,11 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#181F1A] text-white select-none">
       {/* 1. Meeting Top Bar */}
-      <header className="h-14 bg-[#1E2620] border-b border-[#2C382F] px-3 md:px-5 flex items-center justify-between z-30 shrink-0 gap-2">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+      <header className="h-12 sm:h-14 bg-[#1E2620] border-b border-[#2C382F] px-2 sm:px-4 md:px-5 flex items-center justify-between z-30 shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg text-[#A8B6AB] hover:text-white hover:bg-[#2A362D] transition-colors cursor-pointer shrink-0"
+            className="p-1 sm:p-1.5 rounded-lg text-[#A8B6AB] hover:text-white hover:bg-[#2A362D] transition-colors cursor-pointer shrink-0"
             title="Thoát về Tổng quan"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -233,7 +217,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
             <div className="flex items-center gap-1.5 sm:gap-2">
               <h1
                 onClick={() => setShowTitleDetailModal(true)}
-                className="text-xs md:text-sm font-bold text-white tracking-tight truncate max-w-[130px] sm:max-w-xs md:max-w-md cursor-pointer hover:underline"
+                className="text-xs md:text-sm font-bold text-white tracking-tight truncate max-w-[120px] sm:max-w-xs md:max-w-md cursor-pointer hover:underline"
                 title="Bấm để xem tên đầy đủ"
               >
                 {session.title}
@@ -249,8 +233,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         </div>
 
         {/* Center: Live timer & Recording status */}
-        <div className="flex items-center gap-2 sm:gap-3 bg-[#151C17] px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#2A362D] shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-[#83A58E]">
+        <div className="flex items-center gap-1.5 sm:gap-3 bg-[#151C17] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-[#2A362D] shrink-0">
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-mono font-medium text-[#83A58E]">
             <span className="w-2 h-2 rounded-full bg-[#E5484D] animate-ping" />
             <span className="tabular-nums">{formatTimer(elapsedSeconds)}</span>
             <span className="text-[#6D7F72]">/ {formatTimer(session.durationSeconds)}</span>
@@ -262,29 +246,29 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         </div>
 
         {/* Right: Mobile View Tabs & End button */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Mobile Tab switchers (Slide / Audience / Camera) */}
           <div className="lg:hidden flex items-center bg-[#253027] p-0.5 rounded-lg border border-[#37473A]">
             <button
               onClick={() => setMobileTab('slide')}
-              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
-                mobileTab === 'slide' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
+              className={`px-2 py-1 text-[10px] sm:text-xs rounded font-medium transition-colors cursor-pointer ${
+                mobileTab === 'slide' ? 'bg-[#83A58E] text-white font-semibold shadow-2xs' : 'text-[#A8B6AB]'
               }`}
             >
               Slide
             </button>
             <button
               onClick={() => setMobileTab('audience')}
-              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
-                mobileTab === 'audience' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
+              className={`px-2 py-1 text-[10px] sm:text-xs rounded font-medium transition-colors cursor-pointer ${
+                mobileTab === 'audience' ? 'bg-[#83A58E] text-white font-semibold shadow-2xs' : 'text-[#A8B6AB]'
               }`}
             >
               Hội đồng ({participants.length})
             </button>
             <button
               onClick={() => setMobileTab('camera')}
-              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
-                mobileTab === 'camera' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
+              className={`px-2 py-1 text-[10px] sm:text-xs rounded font-medium transition-colors cursor-pointer ${
+                mobileTab === 'camera' ? 'bg-[#83A58E] text-white font-semibold shadow-2xs' : 'text-[#A8B6AB]'
               }`}
             >
               Camera
@@ -293,7 +277,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
           <button
             onClick={() => setShowEndModal(true)}
-            className="text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white font-medium transition-colors cursor-pointer shrink-0"
+            className="text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white font-medium transition-colors cursor-pointer shrink-0 min-h-[32px] sm:min-h-[36px] flex items-center justify-center"
           >
             Kết thúc
           </button>
@@ -302,7 +286,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
       {/* Simulated Question Banner / Toast if triggered */}
       {activeQuestion && (
-        <div className="bg-[#2D3930] border-b border-[#3E4F41] px-4 py-2.5 flex items-center justify-between text-xs animate-in slide-in-from-top duration-200 z-20">
+        <div className="bg-[#2D3930] border-b border-[#3E4F41] px-3 sm:px-4 py-2 flex items-center justify-between text-xs animate-in slide-in-from-top duration-200 z-20">
           <div className="flex items-start gap-2.5">
             <span className="w-2 h-2 rounded-full bg-[#E8C27B] mt-1.5 shrink-0" />
             <div>
@@ -314,7 +298,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </div>
           <button
             onClick={() => setActiveQuestion(null)}
-            className="text-[#A8B6AB] hover:text-white px-2.5 py-1 ml-4 rounded bg-[#1C241E] text-[11px] shrink-0 border border-[#3A4A3E]"
+            className="text-[#A8B6AB] hover:text-white px-2 py-1 ml-3 rounded bg-[#1C241E] text-[10px] sm:text-[11px] shrink-0 border border-[#3A4A3E] cursor-pointer"
           >
             Đã trả lời / Đóng
           </button>
@@ -322,7 +306,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       )}
 
       {/* 2. Main Conference Stage (Responsive Layout) */}
-      <div className="flex-1 flex overflow-hidden p-2 md:p-4 gap-3 relative min-h-0">
+      <div className="flex-1 flex overflow-hidden p-1.5 sm:p-2 md:p-4 gap-2 md:gap-3 relative min-h-0">
         {/* Left / Center Work Area */}
         <div className="flex-1 flex flex-col gap-2 md:gap-3 min-w-0 min-h-0 overflow-hidden">
           {/* Top Audience & Juror Video Strip (Horizontal Carousel on Desktop or when mobileTab === 'audience') */}

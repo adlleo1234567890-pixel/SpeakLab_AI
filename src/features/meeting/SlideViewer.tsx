@@ -230,11 +230,11 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
   const activeSlideWidth = isPptx ? slideDimensions.width : DEFAULT_SLIDE_WIDTH;
   const activeSlideHeight = isPptx ? slideDimensions.height : DEFAULT_SLIDE_HEIGHT;
 
-  // Two-axis proportional scale calculation
-  const paddingX = containerDimensions.width < 500 ? 12 : 24;
-  const paddingY = containerDimensions.height < 400 ? 12 : 24;
-  const availW = Math.max(100, containerDimensions.width - paddingX);
-  const availH = Math.max(100, containerDimensions.height - paddingY);
+  // Two-axis proportional scale calculation with responsive padding for mobile & landscape
+  const paddingX = containerDimensions.width < 450 ? 8 : containerDimensions.width < 768 ? 14 : 24;
+  const paddingY = containerDimensions.height < 360 ? 6 : containerDimensions.height < 500 ? 10 : 20;
+  const availW = Math.max(80, containerDimensions.width - paddingX);
+  const availH = Math.max(80, containerDimensions.height - paddingY);
 
   const scaleX = availW / activeSlideWidth;
   const scaleY = availH / activeSlideHeight;
@@ -363,7 +363,7 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
   return (
     <div className="flex-1 flex flex-col bg-[#1A211C] rounded-2xl border border-[#2D3830] overflow-hidden shadow-lg relative min-h-0 w-full h-full">
       {/* 1. Top Slide Header toolbar inside meeting */}
-      <div className="h-11 bg-[#242C26] border-b border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs text-[#A8B6AB] shrink-0 gap-2">
+      <div className="h-10 sm:h-11 bg-[#242C26] border-b border-[#2D3830] px-2 sm:px-4 flex items-center justify-between text-xs text-[#A8B6AB] shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0 shrink-0">
           <span className={`w-2 h-2 rounded-full shrink-0 ${isScreenShare ? 'bg-[#83A58E] animate-pulse ring-2 ring-[#83A58E]/40' : 'bg-[#83A58E]'}`} />
           <span className="font-medium text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">
@@ -813,10 +813,10 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
 
       {/* 3. Bottom Slide Navigation Bar */}
       {isScreenShare ? (
-        <div className="h-12 bg-[#242C26] border-t border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs shrink-0">
-          <div className="flex items-center gap-2 text-[#A8B6AB] text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-[#83A58E] animate-pulse" />
-            <span className="font-semibold text-white">Chế độ chia sẻ cửa sổ PowerPoint</span>
+        <div className="h-10 sm:h-12 bg-[#242C26] border-t border-[#2D3830] px-2 sm:px-4 flex items-center justify-between text-xs shrink-0">
+          <div className="flex items-center gap-2 text-[#A8B6AB] text-[11px] truncate">
+            <span className="w-2 h-2 rounded-full bg-[#83A58E] animate-pulse shrink-0" />
+            <span className="font-semibold text-white truncate">Cửa sổ PowerPoint ngoài</span>
             <span className="hidden sm:inline text-[#768078]">· Hiệu ứng thời gian thực</span>
           </div>
 
@@ -826,7 +826,7 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
 
           <button
             onClick={onStopScreenShare}
-            className="px-3 py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white flex items-center gap-1.5 font-medium transition-colors cursor-pointer min-h-[36px]"
+            className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white flex items-center gap-1.5 font-medium transition-colors cursor-pointer min-h-[34px] sm:min-h-[36px] shrink-0"
             title="Dừng chia sẻ màn hình"
           >
             <Square className="w-3.5 h-3.5 fill-current" />
@@ -834,11 +834,11 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
           </button>
         </div>
       ) : (
-        <div className="h-12 bg-[#242C26] border-t border-[#2D3830] px-3 md:px-4 flex items-center justify-between text-xs shrink-0">
+        <div className="h-11 sm:h-12 bg-[#242C26] border-t border-[#2D3830] px-2 sm:px-4 flex items-center justify-between text-xs shrink-0">
           <button
             onClick={onPrevSlide}
             disabled={currentSlideIndex === 0}
-            className="px-3 py-1.5 rounded-lg bg-[#2E3A31] hover:bg-[#3B4A3F] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#2E3A31] hover:bg-[#3B4A3F] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px] sm:min-h-[38px] shrink-0"
             title="Về slide trước"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -846,12 +846,12 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
           </button>
 
           {/* Slide Thumbnail / Number Buttons */}
-          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto max-w-[200px] sm:max-w-xs md:max-w-md py-1 scrollbar-thin">
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto max-w-[170px] sm:max-w-xs md:max-w-md py-1 scrollbar-none sm:scrollbar-thin touch-pan-x">
             {Array.from({ length: totalEffectiveSlides }, (_, idx) => (
               <button
                 key={idx}
                 onClick={() => onSelectSlide(idx)}
-                className={`w-7 h-6 rounded flex items-center justify-center font-mono text-[11px] transition-all cursor-pointer shrink-0 ${
+                className={`min-w-[28px] h-7 sm:w-7 sm:h-6 px-1 rounded flex items-center justify-center font-mono text-[11px] transition-all cursor-pointer shrink-0 ${
                   currentSlideIndex === idx
                     ? 'bg-[#83A58E] text-white font-bold ring-1 ring-white/30'
                     : 'bg-[#2E3A31] text-[#A8B6AB] hover:text-white hover:bg-[#3B4A3F]'
@@ -866,7 +866,7 @@ export const SlideViewer: React.FC<SlideViewerProps> = ({
           <button
             onClick={onNextSlide}
             disabled={currentSlideIndex >= totalEffectiveSlides - 1}
-            className="px-3 py-1.5 rounded-lg bg-[#83A58E] hover:bg-[#6F917A] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 font-semibold transition-colors cursor-pointer min-h-[36px]"
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#83A58E] hover:bg-[#6F917A] disabled:opacity-30 disabled:cursor-not-allowed text-white flex items-center gap-1.5 font-semibold transition-colors cursor-pointer min-h-[36px] sm:min-h-[38px] shrink-0"
             title="Chuyển slide tiếp theo"
           >
             <span className="hidden sm:inline">Slide sau</span>

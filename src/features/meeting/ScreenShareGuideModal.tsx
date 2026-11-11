@@ -17,60 +17,135 @@ import {
 } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
+import { screenShareService } from '../../services/screenShareService';
 
 interface ScreenShareGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmStartShare: () => void;
-  isSupported?: boolean;
 }
 
 export const ScreenShareGuideModal: React.FC<ScreenShareGuideModalProps> = ({
   isOpen,
   onClose,
   onConfirmStartShare,
-  isSupported = true,
 }) => {
+  const capability = screenShareService.getCapability();
+  const isSupported = capability.isSupported;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Chia sẻ màn hình PowerPoint có hiệu ứng"
-      subtitle="Đợt 2.3 · Trình chiếu trực tiếp với Animation và Transition đầy đủ"
+      title={isSupported ? 'Chia sẻ màn hình PowerPoint có hiệu ứng' : 'Thông tin chia sẻ màn hình'}
+      subtitle={isSupported ? 'Đợt 2.3 · Trình chiếu trực tiếp với Animation và Transition đầy đủ' : 'Khả năng hỗ trợ trên thiết bị hiện tại'}
       maxWidth="xl"
       footer={
         <div className="flex items-center justify-between w-full">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Để sau / Giữ slide nội bộ
+            {isSupported ? 'Để sau / Giữ slide nội bộ' : 'Đóng'}
           </Button>
 
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onConfirmStartShare}
-            className="flex items-center gap-2"
-          >
-            <Share2 className="w-4 h-4" />
-            <span>Bắt đầu chia sẻ ngay</span>
-          </Button>
+          {isSupported ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onConfirmStartShare}
+              className="flex items-center gap-2"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Bắt đầu chia sẻ ngay</span>
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onClose}
+              className="flex items-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Tiếp tục dùng Slide nội bộ</span>
+            </Button>
+          )}
         </div>
       }
     >
       <div className="space-y-4 text-xs text-[#3D4740]">
-        {/* Value Proposition Hero Banner */}
-        <div className="p-3.5 rounded-xl bg-[#EEF4F0] border border-[#D9E5DC] flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#324C3B] text-white flex items-center justify-center shrink-0 mt-0.5">
-            <Sparkles className="w-4 h-4 text-[#83A58E]" />
+        {!isSupported ? (
+          /* ================= UNSUPPORTED RUNTIME NOTICE (MOBILE / RESTRICTED) ================= */
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-[#FAFBF9] border border-[#E4E9E3] space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#FAF2EB] border border-[#E8D2BE] text-[#873631] flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[#3D4740] leading-snug">
+                    Thông báo tính năng chia sẻ màn hình
+                  </h4>
+                  <p className="text-xs text-[#556057] mt-1 leading-relaxed">
+                    Trình duyệt hoặc thiết bị hiện tại chưa hỗ trợ chia sẻ màn hình trực tiếp. Bạn vẫn có thể tải PowerPoint để trình chiếu trong SpeakLab AI.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-white border border-[#E4E9E3] space-y-2 text-[11px] text-[#556057]">
+                <div className="flex items-center justify-between font-semibold text-[#3D4740]">
+                  <span>Môi trường phát hiện:</span>
+                  <span className="text-[#4A6453] bg-[#EEF4F0] px-2 py-0.5 rounded border border-[#D9E5DC]">
+                    {capability.platformLabel}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#768078]">
+                  {capability.technicalDetails || 'Trình duyệt di động hạn chế truyền màn hình qua Web API theo tiêu chuẩn an toàn của hệ điều hành.'}
+                </p>
+              </div>
+            </div>
+
+            {/* 2 Practical Alternatives */}
+            <div className="space-y-2">
+              <h5 className="font-bold text-[#3D4740] text-[11px] uppercase tracking-wider">
+                Phương án đề xuất để luyện tập tốt nhất:
+              </h5>
+
+              <div className="p-3 rounded-xl bg-[#EEF4F0] border border-[#D9E5DC] flex items-start gap-3">
+                <CheckCircle2 className="w-4 h-4 text-[#4A6453] shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-xs text-[#2A4433]">Phương án 1 (Khuyên dùng trên điện thoại):</p>
+                  <p className="text-[11px] text-[#4A6453] mt-0.5 leading-relaxed">
+                    Sử dụng <strong>Chế độ trình chiếu PPTX nội bộ</strong>: Hệ thống hỗ trợ tải tệp .pptx thật từ điện thoại, hiển thị đầy đủ văn bản, biểu đồ, hình vẽ và hỗ trợ chế độ Vừa khung 100% không cần cuộn.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#FAFBF9] border border-[#E4E9E3] flex items-start gap-3">
+                <MonitorPlay className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-xs text-[#3D4740]">Phương án 2 (Khi cần Animation & Transition):</p>
+                  <p className="text-[11px] text-[#768078] mt-0.5 leading-relaxed">
+                    Mở SpeakLab AI trên trình duyệt máy tính (Google Chrome hoặc Microsoft Edge) để chia sẻ trực tiếp cửa sổ PowerPoint có hiệu ứng chuyển động hoàn chỉnh.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <h4 className="font-bold text-sm text-[#2A4433] leading-snug">
-              Trình diễn bài nói với 100% hiệu ứng PowerPoint gốc
-            </h4>
-            <p className="text-[#4A6453] text-xs mt-0.5 leading-relaxed">
-              Các hiệu ứng chữ xuất hiện (Fly In, Fade, Zoom) và chuyển slide (Morph, Push, Wipe) của PowerPoint sẽ được truyền phát trực tiếp ở độ nét cao vào phòng họp SpeakLab AI.
-            </p>
-          </div>
-        </div>
+        ) : (
+          /* ================= SUPPORTED RUNTIME (DESKTOP BROWSER) ================= */
+          <>
+            {/* Value Proposition Hero Banner */}
+            <div className="p-3.5 rounded-xl bg-[#EEF4F0] border border-[#D9E5DC] flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#324C3B] text-white flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4 text-[#83A58E]" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-[#2A4433] leading-snug">
+                  Trình diễn bài nói với 100% hiệu ứng PowerPoint gốc
+                </h4>
+                <p className="text-[#4A6453] text-xs mt-0.5 leading-relaxed">
+                  Các hiệu ứng chữ xuất hiện (Fly In, Fade, Zoom) và chuyển slide (Morph, Push, Wipe) của PowerPoint sẽ được truyền phát trực tiếp ở độ nét cao vào phòng họp SpeakLab AI.
+                </p>
+              </div>
+            </div>
 
         {/* 5-Step Guide */}
         <div>
@@ -157,6 +232,8 @@ export const ScreenShareGuideModal: React.FC<ScreenShareGuideModalProps> = ({
             Không nén giảm chất lượng
           </span>
         </div>
+          </>
+        )}
       </div>
     </Modal>
   );
