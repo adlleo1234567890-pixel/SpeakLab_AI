@@ -134,13 +134,19 @@ export class BrowserScreenShareProvider implements IScreenShareProvider {
       throw new Error(cap.friendlyNotice);
     }
 
-    return await navigator.mediaDevices.getDisplayMedia({
+    // Configure options with displaySurface hint and exclude current tab to prevent infinite mirror loop
+    const displayMediaOptions = {
       video: {
         cursor: 'always',
         displaySurface: 'window',
       } as MediaTrackConstraints,
       audio: false,
-    });
+      preferCurrentTab: false,
+      selfBrowserSurface: 'exclude',
+      systemAudio: 'exclude',
+    } as DisplayMediaStreamOptions;
+
+    return await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
   }
 
   async stopShare(stream?: MediaStream | null): Promise<void> {

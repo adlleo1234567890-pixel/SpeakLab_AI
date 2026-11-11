@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock,
   ChevronLeft,
@@ -37,7 +37,7 @@ import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { pptxSessionStore } from '../services/pptxService';
 import { screenShareService } from '../services/screenShareService';
-import { mediaDeviceService } from '../services/mediaDeviceService';
+import { mediaDeviceService, DevicePermissionState } from '../services/mediaDeviceService';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -73,11 +73,13 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [canSwitchCamera, setCanSwitchCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [cameraState, setCameraState] = useState<DevicePermissionState>('idle');
 
   const [isMuted, setIsMuted] = useState(true);
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [isMicLoading, setIsMicLoading] = useState(false);
+  const [micState, setMicState] = useState<DevicePermissionState>('idle');
 
   // Device Selection & Hardware Settings
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
@@ -85,7 +87,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [selectedMicrophoneId, setSelectedMicrophoneId] = useState<string>('');
 
-  // Screen Share State (Phase 2.3 & 2.4)
+  // Screen Share State (Independent stream from camera & microphone)
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [previousSource, setPreviousSource] = useState<PresentationSource | undefined>(undefined);
@@ -194,16 +196,51 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
   // Subscribe to real-time audio volume level
   useEffect(() => {
-    const unsubscribe = mediaDeviceService.subscribeAudioLevel((level) => {
+    const unsubscribeAudio = mediaDeviceService.subscribeAudioLevel((level) => {
       setAudioLevel(level);
     });
+
+    // Synchronize state with real-time media device events (track mute/unmute/ended)
+    const unsubscribeDevice = mediaDeviceService.subscribe(() => {
+      const camStatus = mediaDeviceService.getCameraStatus();
+      const micStatus = mediaDeviceService.getMicrophoneStatus();
+
+      setCameraStream(mediaDeviceService.getCameraStream());
+      setIsCameraOff(!camStatus.isEnabled);
+      setCameraFacingMode(mediaDeviceService.getCurrentFacingMode());
+      setCameraState(camStatus.permissionState);
+      setCameraError(camStatus.errorMessage || null);
+
+      setIsMuted(!micStatus.isEnabled);
+      setMicState(micStatus.permissionState);
+      setMicError(micStatus.errorMessage || null);
+    });
+
     loadHardwareDevices();
+
     return () => {
-      unsubscribe();
+      unsubscribeAudio();
+      unsubscribeDevice();
     };
   }, []);
 
-  // Stop Screen Share handler
+  // Window Focus and Visibility Recovery:
+  // When user switches windows or returns to SpeakLab AI from PowerPoint,
+  // ensure AudioContext and camera/mic tracks remain active and resumed
+  useEffect(() => {
+    const handleFocusRecovery = () => {
+      mediaDeviceService.resumeAudio();
+    };
+
+    window.addEventListener('focus', handleFocusRecovery);
+    document.addEventListener('visibilitychange', handleFocusRecovery);
+    return () => {
+      window.removeEventListener('focus', handleFocusRecovery);
+      document.removeEventListener('visibilitychange', handleFocusRecovery);
+    };
+  }, []);
+
+  // Stop Screen Share handler (stops ONLY screen capture tracks, never touches camera/mic)
   const handleStopScreenShare = () => {
     screenShareService.stopShare(screenStream);
     setScreenStream(null);
@@ -222,9 +259,12 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         }
       );
     }
+
+    // Ensure audio level analyzer is resumed smoothly
+    mediaDeviceService.resumeAudio();
   };
 
-  // Start Screen Share handler
+  // Start Screen Share handler (preserves active camera and microphone tracks)
   const handleStartScreenShare = async () => {
     setShowShareGuideModal(false);
 
@@ -255,6 +295,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         status: 'ready',
         stream,
       });
+
+      // Ensure audio analyzer continues smoothly if browser momentarily blurred the tab
+      mediaDeviceService.resumeAudio();
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'name' in err && err.name === 'NotAllowedError') {
         // User closed or dismissed the browser picker
@@ -267,15 +310,23 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
     }
   };
 
-  // Cleanup all media tracks on unmount
+  // Keep ref to active screenStream for unmount cleanup ONLY
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
+
+  // CRITICAL FIX: Cleanup media tracks ONLY when leaving the meeting room (unmount)!
+  // Empty dependency array [] ensures this NEVER triggers on screenStream changes!
   useEffect(() => {
     return () => {
-      if (screenStream) {
-        screenStream.getTracks().forEach((track) => track.stop());
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((track) => track.stop());
+        screenStreamRef.current = null;
       }
       mediaDeviceService.stopAll();
     };
-  }, [screenStream]);
+  }, []);
 
   // Elapsed time counter with clean lifecycle management
   useEffect(() => {
@@ -323,7 +374,11 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       <header className="h-12 sm:h-14 bg-[#1E2620] border-b border-[#2C382F] px-2 sm:px-4 md:px-5 flex items-center justify-between z-30 shrink-0 gap-2">
         <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
           <button
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => {
+              handleStopScreenShare();
+              mediaDeviceService.stopAll();
+              onNavigate('dashboard');
+            }}
             className="p-1 sm:p-1.5 rounded-lg text-[#A8B6AB] hover:text-white hover:bg-[#2A362D] transition-colors cursor-pointer shrink-0"
             title="Thoát về Tổng quan"
           >
@@ -494,6 +549,10 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
                 onSwitchCamera={handleSwitchCamera}
                 cameraError={cameraError}
                 micError={micError}
+                cameraState={cameraState}
+                micState={micState}
+                onReconnectCamera={handleToggleCamera}
+                onReconnectMic={handleToggleMic}
                 onShowCameraNotice={() => setShowCameraNoticeModal(true)}
               />
 

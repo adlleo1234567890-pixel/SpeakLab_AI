@@ -147,6 +147,17 @@ export const ScreenShareGuideModal: React.FC<ScreenShareGuideModalProps> = ({
               </div>
             </div>
 
+            {/* Section IX Anti-Mirror Warning Notice */}
+            <div className="p-3 rounded-xl bg-[#FAF2EB] border border-[#E8D2BE] flex items-start gap-2.5 text-[#873631]">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-bold block text-xs text-[#873631] mb-0.5">
+                  Lưu ý quan trọng khi chọn màn hình:
+                </span>
+                Để trình chiếu PowerPoint có hiệu ứng, hãy chọn đúng <strong>cửa sổ trình chiếu PowerPoint</strong> trong hộp thoại của trình duyệt. <strong>Không chọn cửa sổ SpeakLab AI để tránh hình ảnh lặp lại.</strong>
+              </div>
+            </div>
+
         {/* 5-Step Guide */}
         <div>
           <h5 className="font-bold text-[#3D4740] mb-2.5 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">

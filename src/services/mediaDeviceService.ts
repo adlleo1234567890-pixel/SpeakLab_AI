@@ -7,6 +7,8 @@ export type DevicePermissionState =
   | 'idle'
   | 'requesting'
   | 'granted'
+  | 'interrupted'
+  | 'disconnected'
   | 'denied'
   | 'unavailable'
   | 'busy'
@@ -242,9 +244,36 @@ class MediaDeviceService {
       this.cameraFacingMode = facingMode;
       if (deviceId) this.selectedCameraId = deviceId;
 
-      // Handle unexpected track ending (e.g. unplugged webcam)
+      // Handle track mute, unmute, ended events
+      videoTrack.onmute = () => {
+        // Temporarily interrupted (e.g. system window switch or OS focus shift)
+        this.cameraStatus = {
+          ...this.cameraStatus,
+          permissionState: 'interrupted',
+          errorMessage: 'Camera tạm thời gián đoạn tín hiệu.',
+        };
+        this.notifyStatusChange();
+      };
+
+      videoTrack.onunmute = () => {
+        // Video signal restored automatically
+        this.cameraStatus = {
+          ...this.cameraStatus,
+          permissionState: 'granted',
+          errorMessage: undefined,
+        };
+        this.notifyStatusChange();
+      };
+
       videoTrack.onended = () => {
-        this.stopCamera();
+        // Track ended permanently (e.g. unplugged or OS revoked)
+        this.cameraStatus = {
+          isEnabled: false,
+          permissionState: 'disconnected',
+          errorMessage: 'Camera đã mất kết nối với thiết bị.',
+        };
+        this.stopCameraTracksOnly();
+        this.notifyStatusChange();
       };
 
       this.cameraStatus = {
@@ -358,8 +387,37 @@ class MediaDeviceService {
       this.microphoneStream = stream;
       if (deviceId) this.selectedMicrophoneId = deviceId;
 
+      audioTrack.onmute = () => {
+        // Temporarily interrupted
+        this.microphoneStatus = {
+          ...this.microphoneStatus,
+          permissionState: 'interrupted',
+          errorMessage: 'Micro tạm thời gián đoạn tín hiệu.',
+        };
+        this.notifyStatusChange();
+      };
+
+      audioTrack.onunmute = () => {
+        // Signal restored
+        this.microphoneStatus = {
+          ...this.microphoneStatus,
+          permissionState: 'granted',
+          errorMessage: undefined,
+        };
+        this.resumeAudio();
+        this.notifyStatusChange();
+      };
+
       audioTrack.onended = () => {
-        this.stopMicrophone();
+        // Track ended permanently
+        this.microphoneStatus = {
+          isEnabled: false,
+          permissionState: 'disconnected',
+          errorMessage: 'Micro đã mất kết nối với thiết bị.',
+        };
+        this.stopMicrophoneTracksOnly();
+        this.stopAudioAnalyser();
+        this.notifyStatusChange();
       };
 
       // Set up Web Audio Analyser for volume metering
@@ -452,6 +510,11 @@ class MediaDeviceService {
         return;
       }
 
+      // Auto-resume AudioContext if browser suspended it during window change or getDisplayMedia
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {});
+      }
+
       this.analyserNode.getByteFrequencyData(dataArray);
 
       // Calculate Root Mean Square / Average
@@ -468,6 +531,29 @@ class MediaDeviceService {
     };
 
     this.audioLevelAnimFrame = requestAnimationFrame(update);
+  }
+
+  /**
+   * Resume audio context if suspended by browser focus shift
+   */
+  public resumeAudio(): void {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume().catch(() => {});
+    }
+  }
+
+  /**
+   * Reconnect camera if connection was interrupted or disconnected
+   */
+  public async reconnectCamera(): Promise<MediaStream> {
+    return await this.startCamera();
+  }
+
+  /**
+   * Reconnect microphone if connection was interrupted or disconnected
+   */
+  public async reconnectMicrophone(): Promise<MediaStream> {
+    return await this.startMicrophone();
   }
 
   private stopAudioAnalyser(): void {
