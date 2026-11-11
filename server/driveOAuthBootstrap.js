@@ -15,12 +15,14 @@ export function readOAuthConfig(env = process.env) {
   const setupKey = (env.GOOGLE_OAUTH_SETUP_KEY || '').trim();
   const redirectUri = (env.GOOGLE_OAUTH_REDIRECT_URI || '').trim();
   const folderId = (env.GOOGLE_DRIVE_FOLDER_ID || '').trim();
-  if (!clientId || !clientSecret || !redirectUri || !folderId || setupKey.length < 24) return null;
+  const ownerEmail = (env.GOOGLE_DRIVE_OWNER_EMAIL || '').trim().toLowerCase();
+  if (!clientId || !clientSecret || !redirectUri || !folderId || setupKey.length < 24 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) return null;
   let parsed;
   try { parsed = new URL(redirectUri); } catch { return null; }
   if (parsed.protocol !== 'https:' || parsed.pathname !== CALLBACK_PATH ||
       parsed.search || parsed.hash || parsed.username || parsed.password) return null;
-  return { clientId, clientSecret, setupKey, redirectUri, folderId };
+  return { clientId, clientSecret, setupKey, redirectUri, folderId, ownerEmail };
 }
 
 export function matchesOAuthOrigin(request, config) {
@@ -104,7 +106,8 @@ export function unconfiguredResponse() {
   return htmlResponse(503, '<h2>Chưa hoàn tất cấu hình backend</h2>' +
     '<p>Hãy thiết lập các biến <code>GOOGLE_CLIENT_SECRET</code>, ' +
     '<code>GOOGLE_OAUTH_SETUP_KEY</code>, <code>GOOGLE_OAUTH_REDIRECT_URI</code>, ' +
-    '<code>GOOGLE_CLIENT_ID</code> và <code>GOOGLE_DRIVE_FOLDER_ID</code> chỉ trong Vercel Preview.</p>' +
+    '<code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_DRIVE_FOLDER_ID</code> và ' +
+    '<code>GOOGLE_DRIVE_OWNER_EMAIL</code> chỉ trong Vercel Preview.</p>' +
     '<p>Chưa có thao tác nào được thực hiện với Google Drive.</p>');
 }
 
@@ -113,4 +116,20 @@ export function wrongOriginResponse() {
     '<p>Hãy mở chức năng thiết lập OAuth trên đúng tên miền Preview trùng với ' +
     '<code>GOOGLE_OAUTH_REDIRECT_URI</code>. Không dùng tên miền Production khi ' +
     'đang cấu hình chỉ cho nhánh Preview.</p>');
+}
+
+
+/** Fail closed if someone opens the endpoint via a different deploy, domain or HTTP origin. */
+export function isExpectedServerOrigin(request, config) {
+  const expected = new URL(config.redirectUri);
+  const actualHost = String(request.headers.host || '').toLowerCase();
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  return forwardedProto === 'https' && actualHost === expected.host.toLowerCase();
+}
+
+/** Convert a Web Response from the shared HTML helper into a Vercel Node response. */
+export async function sendWebResponse(nodeResponse, webResponse) {
+  nodeResponse.statusCode = webResponse.status;
+  for (const [name, value] of webResponse.headers) nodeResponse.setHeader(name, value);
+  nodeResponse.end(await webResponse.text());
 }
