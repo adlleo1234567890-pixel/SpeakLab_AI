@@ -37,6 +37,7 @@ import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { pptxSessionStore } from '../services/pptxService';
 import { screenShareService } from '../services/screenShareService';
+import { mediaDeviceService } from '../services/mediaDeviceService';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -60,12 +61,29 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
     session.presentationSource
   );
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
   const [isAttendeesOpen, setIsAttendeesOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(145); // start with realistic ~2m25s demo time
   const [isTimerRunning, setIsTimerRunning] = useState(true);
+
+  // Real Camera & Microphone State (Phase 3.1: default to OFF for privacy)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [isCameraOff, setIsCameraOff] = useState(true);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [canSwitchCamera, setCanSwitchCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+
+  const [isMuted, setIsMuted] = useState(true);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [micError, setMicError] = useState<string | null>(null);
+  const [isMicLoading, setIsMicLoading] = useState(false);
+
+  // Device Selection & Hardware Settings
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [availableMicrophones, setAvailableMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState<string>('');
 
   // Screen Share State (Phase 2.3 & 2.4)
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -86,6 +104,104 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
   // Mobile View Switcher: 'slide' | 'audience' | 'camera'
   const [mobileTab, setMobileTab] = useState<'slide' | 'audience' | 'camera'>('slide');
+
+  // Query hardware devices list
+  const loadHardwareDevices = async () => {
+    try {
+      const devices = await mediaDeviceService.getAvailableDevices();
+      setAvailableCameras(devices.videoInputs);
+      setAvailableMicrophones(devices.audioInputs);
+      if (devices.videoInputs.length > 1) {
+        setCanSwitchCamera(true);
+      }
+    } catch (err) {
+      console.warn('Không thể truy vấn danh sách thiết bị media:', err);
+    }
+  };
+
+  // Real Camera Toggle Handler
+  const handleToggleCamera = async () => {
+    setCameraError(null);
+    if (!isCameraOff && cameraStream) {
+      // Turn OFF
+      mediaDeviceService.stopCamera();
+      setCameraStream(null);
+      setIsCameraOff(true);
+    } else {
+      // Turn ON
+      setIsCameraLoading(true);
+      try {
+        const stream = await mediaDeviceService.startCamera({
+          deviceId: selectedCameraId || undefined,
+          facingMode: cameraFacingMode,
+        });
+        setCameraStream(stream);
+        setIsCameraOff(false);
+        setCameraFacingMode(mediaDeviceService.getCurrentFacingMode());
+        const hasMultiple = await mediaDeviceService.hasMultipleVideoInputs();
+        setCanSwitchCamera(hasMultiple);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Không thể kích hoạt camera.';
+        setCameraError(msg);
+        setIsCameraOff(true);
+        setCameraStream(null);
+      } finally {
+        setIsCameraLoading(false);
+      }
+    }
+  };
+
+  // Camera switch handler (front/back)
+  const handleSwitchCamera = async () => {
+    if (isCameraOff) return;
+    setIsCameraLoading(true);
+    try {
+      const stream = await mediaDeviceService.switchCamera();
+      setCameraStream(stream);
+      setCameraFacingMode(mediaDeviceService.getCurrentFacingMode());
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Không thể chuyển đổi camera.';
+      setCameraError(msg);
+    } finally {
+      setIsCameraLoading(false);
+    }
+  };
+
+  // Real Microphone Toggle Handler
+  const handleToggleMic = async () => {
+    setMicError(null);
+    if (!isMuted) {
+      // Turn OFF
+      mediaDeviceService.stopMicrophone();
+      setIsMuted(true);
+      setAudioLevel(0);
+    } else {
+      // Turn ON
+      setIsMicLoading(true);
+      try {
+        await mediaDeviceService.startMicrophone(selectedMicrophoneId || undefined);
+        setIsMuted(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Không thể kích hoạt micro.';
+        setMicError(msg);
+        setIsMuted(true);
+        setAudioLevel(0);
+      } finally {
+        setIsMicLoading(false);
+      }
+    }
+  };
+
+  // Subscribe to real-time audio volume level
+  useEffect(() => {
+    const unsubscribe = mediaDeviceService.subscribeAudioLevel((level) => {
+      setAudioLevel(level);
+    });
+    loadHardwareDevices();
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Stop Screen Share handler
   const handleStopScreenShare = () => {
@@ -151,12 +267,13 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
     }
   };
 
-  // Cleanup screen tracks on unmount
+  // Cleanup all media tracks on unmount
   useEffect(() => {
     return () => {
       if (screenStream) {
         screenStream.getTracks().forEach((track) => track.stop());
       }
+      mediaDeviceService.stopAll();
     };
   }, [screenStream]);
 
@@ -232,16 +349,17 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </div>
         </div>
 
-        {/* Center: Live timer & Recording status */}
+        {/* Center: Live timer & Recording status (Phase 3.1: Explicitly "Chưa ghi hình") */}
         <div className="flex items-center gap-1.5 sm:gap-3 bg-[#151C17] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-[#2A362D] shrink-0">
           <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-mono font-medium text-[#83A58E]">
-            <span className="w-2 h-2 rounded-full bg-[#E5484D] animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-[#83A58E]" />
             <span className="tabular-nums">{formatTimer(elapsedSeconds)}</span>
             <span className="text-[#6D7F72]">/ {formatTimer(session.durationSeconds)}</span>
           </div>
 
-          <span className="hidden sm:inline-block text-[10px] text-[#A8B6AB] border-l border-[#2A362D] pl-2">
-            Ghi hình mô phỏng
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-[#A8B6AB] border-l border-[#2A362D] pl-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6D7F72]" />
+            Chưa ghi hình
           </span>
         </div>
 
@@ -367,8 +485,15 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
                 currentUser={currentUser}
                 isMuted={isMuted}
                 isCameraOff={isCameraOff}
-                onToggleMic={() => setIsMuted(!isMuted)}
-                onToggleCamera={() => setIsCameraOff(!isCameraOff)}
+                onToggleMic={handleToggleMic}
+                onToggleCamera={handleToggleCamera}
+                cameraStream={cameraStream}
+                audioLevel={audioLevel}
+                facingMode={cameraFacingMode}
+                canSwitchCamera={canSwitchCamera}
+                onSwitchCamera={handleSwitchCamera}
+                cameraError={cameraError}
+                micError={micError}
                 onShowCameraNotice={() => setShowCameraNoticeModal(true)}
               />
 
@@ -439,8 +564,12 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       <MeetingControls
         isMuted={isMuted}
         isCameraOff={isCameraOff}
-        onToggleMic={() => setIsMuted(!isMuted)}
-        onToggleCamera={() => setIsCameraOff(!isCameraOff)}
+        onToggleMic={handleToggleMic}
+        onToggleCamera={handleToggleCamera}
+        isCameraLoading={isCameraLoading}
+        isMicLoading={isMicLoading}
+        cameraError={cameraError}
+        micError={micError}
         onShareScreenClick={() => setShowShareGuideModal(true)}
         isScreenSharing={isScreenSharing}
         onStopScreenShare={handleStopScreenShare}
@@ -455,7 +584,10 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           setIsAttendeesOpen(false);
         }}
         isNotesOpen={isNotesOpen}
-        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSettings={() => {
+          loadHardwareDevices();
+          setShowSettingsModal(true);
+        }}
         onEndMeeting={() => setShowEndModal(true)}
       />
 
@@ -506,12 +638,14 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         elapsedSeconds={elapsedSeconds}
         onConfirmViewReport={() => {
           handleStopScreenShare();
+          mediaDeviceService.stopAll();
           setIsTimerRunning(false);
           setShowEndModal(false);
           onFinishSession();
         }}
         onReturnToDashboard={() => {
           handleStopScreenShare();
+          mediaDeviceService.stopAll();
           setIsTimerRunning(false);
           setShowEndModal(false);
           onNavigate('dashboard');
@@ -548,44 +682,132 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         </div>
       </Modal>
 
-      {/* Camera Info Notice Modal */}
+      {/* Camera & Privacy Notice Modal (Section IX) */}
       <Modal
         isOpen={showCameraNoticeModal}
         onClose={() => setShowCameraNoticeModal(false)}
-        title="Thông tin Camera học sinh"
-        subtitle="Chế độ hiển thị mô phỏng khung hình Đợt 1"
+        title="Quyền riêng tư Camera & Micro"
+        subtitle="Thông báo quan trọng về xử lý thiết bị của SpeakLab AI"
         footer={
           <Button variant="primary" size="sm" onClick={() => setShowCameraNoticeModal(false)}>
-            Đóng
+            Tôi đã hiểu
           </Button>
         }
       >
         <div className="space-y-3 text-xs text-[#3D4740]">
-          <p>
-            Ô video của bạn hiện tại sử dụng khung hình định vị (placeholder) để hoàn thiện bố cục giao diện phòng họp.
-          </p>
-          <div className="p-3 bg-[#FAFBF9] rounded-xl border border-[#E4E9E3] space-y-1.5 text-[11px] text-[#556057]">
-            <p className="font-semibold text-[#3D4740]">Kế hoạch cho Đợt 2:</p>
-            <p>· Kích hoạt luồng video trực tiếp từ webcam học sinh qua MediaDevices API.</p>
-            <p>· Khung nhận diện AI đo góc quay mặt và tỷ lệ giao tiếp mắt với thính giả.</p>
-            <p>· Phát hiện các cử chỉ tay bối rối hoặc ngập ngừng.</p>
+          <div className="p-3 bg-[#EEF4F0] rounded-xl border border-[#D9E5DC] text-[11px] leading-relaxed text-[#2A4433] space-y-2">
+            <p className="font-bold text-xs text-[#2A4433]">
+              🛡️ Cam kết bảo mật và quyền riêng tư:
+            </p>
+            <p>
+              Camera và micro chỉ được xem trước trong phiên luyện tập này. Chức năng ghi hình chưa được kích hoạt.
+            </p>
+          </div>
+
+          <div className="space-y-2 text-[11px] text-[#556057] leading-relaxed">
+            <p>
+              • <strong>Không lưu trữ:</strong> Hệ thống không quay video, không ghi âm vào bộ nhớ máy chủ hay thiết bị.
+            </p>
+            <p>
+              • <strong>Không truyền phát:</strong> Hình ảnh webcam và tín hiệu micro chạy trực tiếp trong trình duyệt cục bộ của bạn để tự quan sát dáng điệu và kiểm tra âm lượng.
+            </p>
+            <p>
+              • <strong>Quyền kiểm soát:</strong> Bạn có thể bật hoặc tắt camera và micro bất kỳ lúc nào bằng nút điều khiển ở thanh công cụ bên dưới.
+            </p>
           </div>
         </div>
       </Modal>
 
-      {/* Meeting Settings Modal */}
+      {/* Meeting Settings & Hardware Device Modal */}
       <Modal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
-        title="Cài đặt phòng họp mô phỏng"
-        subtitle="Tùy chọn hiển thị và mức độ phản biện của hội đồng"
+        title="Cài đặt thiết bị & Phòng họp"
+        subtitle="Quản lý Camera, Micro thật và mức độ phản biện"
         footer={
           <Button variant="primary" size="sm" onClick={() => setShowSettingsModal(false)}>
-            Lưu cài đặt
+            Lưu và đóng
           </Button>
         }
       >
         <div className="space-y-4 text-xs text-[#3D4740]">
+          {/* Hardware Device Selection */}
+          <div className="p-3 bg-[#FAFBF9] rounded-xl border border-[#E4E9E3] space-y-3">
+            <p className="font-bold text-[#2A4433] text-xs">Thiết bị thu thật (Media Devices)</p>
+
+            {/* Camera Select */}
+            <div>
+              <label className="block font-semibold mb-1 text-[11px]">Camera đầu vào:</label>
+              {availableCameras.length > 0 ? (
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => {
+                    setSelectedCameraId(e.target.value);
+                    if (!isCameraOff) {
+                      mediaDeviceService.startCamera({ deviceId: e.target.value });
+                    }
+                  }}
+                  className="w-full p-2 rounded-lg border border-[#D9E5DC] bg-white text-xs text-[#3D4740]"
+                >
+                  <option value="">Camera mặc định hệ thống</option>
+                  {availableCameras.map((cam, idx) => (
+                    <option key={cam.deviceId || idx} value={cam.deviceId}>
+                      {cam.label || `Camera ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-[11px] text-[#768078] italic">
+                  Chưa phát hiện camera hoặc trình duyệt đang chặn quyền.
+                </p>
+              )}
+            </div>
+
+            {/* Microphone Select */}
+            <div>
+              <label className="block font-semibold mb-1 text-[11px]">Micro đầu vào:</label>
+              {availableMicrophones.length > 0 ? (
+                <select
+                  value={selectedMicrophoneId}
+                  onChange={(e) => {
+                    setSelectedMicrophoneId(e.target.value);
+                    if (!isMuted) {
+                      mediaDeviceService.startMicrophone(e.target.value);
+                    }
+                  }}
+                  className="w-full p-2 rounded-lg border border-[#D9E5DC] bg-white text-xs text-[#3D4740]"
+                >
+                  <option value="">Microphone mặc định hệ thống</option>
+                  {availableMicrophones.map((mic, idx) => (
+                    <option key={mic.deviceId || idx} value={mic.deviceId}>
+                      {mic.label || `Microphone ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-[11px] text-[#768078] italic">
+                  Chưa phát hiện micro hoặc trình duyệt đang chặn quyền.
+                </p>
+              )}
+            </div>
+
+            {/* Audio level test meter */}
+            <div>
+              <div className="flex items-center justify-between text-[11px] mb-1 font-semibold">
+                <span>Kiểm tra độ nhạy âm thanh:</span>
+                <span className="font-mono text-[#4A6453]">
+                  {!isMuted ? `${audioLevel}%` : 'Micro đang tắt'}
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-[#E4E9E3] overflow-hidden">
+                <div
+                  style={{ width: `${isMuted ? 0 : audioLevel}%` }}
+                  className="h-full bg-[#83A58E] transition-all duration-75 rounded-full"
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block font-semibold mb-1">Mức độ tương tác của hội đồng AI</label>
             <select className="w-full p-2 rounded-lg border border-[#E4E9E3] bg-white text-xs text-[#3D4740]">
@@ -595,15 +817,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
             </select>
           </div>
 
-          <div>
-            <label className="block font-semibold mb-1">Độ trễ phản hồi âm thanh mô phỏng</label>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#768078]">Tự nhiên (1.5s)</span>
-            </div>
-          </div>
-
           <div className="p-2.5 rounded-lg bg-[#FAFBF9] border border-[#E4E9E3] text-[11px] text-[#768078]">
-            Lưu ý: Tất cả các cài đặt đều có hiệu lực trên môi trường mô phỏng cục bộ của Đợt 1.
+            Lưu ý: Camera và micro chỉ được xem trước trong phiên luyện tập này. Chức năng ghi hình chưa được kích hoạt.
           </div>
         </div>
       </Modal>

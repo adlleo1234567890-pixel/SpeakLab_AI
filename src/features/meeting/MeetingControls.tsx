@@ -32,6 +32,10 @@ interface MeetingControlsProps {
   onEndMeeting: () => void;
   isScreenSharing?: boolean;
   onStopScreenShare?: () => void;
+  isCameraLoading?: boolean;
+  isMicLoading?: boolean;
+  cameraError?: string | null;
+  micError?: string | null;
 }
 
 export const MeetingControls: React.FC<MeetingControlsProps> = ({
@@ -49,6 +53,10 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   onEndMeeting,
   isScreenSharing = false,
   onStopScreenShare,
+  isCameraLoading = false,
+  isMicLoading = false,
+  cameraError,
+  micError,
 }) => {
   return (
     <div className="h-14 sm:h-16 md:h-18 bg-[#1B221D] border-t border-[#2D3930] px-2.5 sm:px-4 md:px-6 flex items-center justify-between shadow-2xl z-30 shrink-0">
@@ -62,7 +70,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
             Phòng họp mô phỏng
           </p>
           <p className="text-[10px] text-[#A8B6AB] leading-tight">
-            Đợt 1 · Trình diễn kiến trúc UI/UX
+            Đợt 3.1 · Trình diễn Camera & Micro thật (Chưa ghi hình)
           </p>
         </div>
       </div>
@@ -72,27 +80,63 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Microphone */}
         <button
           onClick={onToggleMic}
-          className={`min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 sm:p-2.5 md:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-            isMuted
+          disabled={isMicLoading}
+          className={`min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 sm:p-2.5 md:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center relative ${
+            isMicLoading
+              ? 'bg-[#27332A] opacity-70 cursor-wait border border-[#3A4A3E]'
+              : isMuted
               ? 'bg-[#3D2625] text-[#F09995] hover:bg-[#4D302F] border border-[#5E3230]'
               : 'bg-[#27332A] text-white hover:bg-[#344438] border border-[#3A4A3E]'
           }`}
-          title={isMuted ? 'Bật Micro (Mô phỏng)' : 'Tắt Micro (Mô phỏng)'}
+          title={
+            isMicLoading
+              ? 'Đang kết nối micro...'
+              : isMuted
+              ? 'Bật Micro thật'
+              : 'Tắt Micro thật'
+          }
         >
-          {isMuted ? <MicOff className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <Mic className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
+          {isMicLoading ? (
+            <span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-[#83A58E] animate-spin" />
+          ) : isMuted ? (
+            <MicOff className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+          ) : (
+            <Mic className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+          )}
+          {micError && isMuted && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D]" />
+          )}
         </button>
 
         {/* Camera */}
         <button
           onClick={onToggleCamera}
-          className={`min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 sm:p-2.5 md:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-            isCameraOff
+          disabled={isCameraLoading}
+          className={`min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 sm:p-2.5 md:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center relative ${
+            isCameraLoading
+              ? 'bg-[#27332A] opacity-70 cursor-wait border border-[#3A4A3E]'
+              : isCameraOff
               ? 'bg-[#3D2625] text-[#F09995] hover:bg-[#4D302F] border border-[#5E3230]'
               : 'bg-[#27332A] text-white hover:bg-[#344438] border border-[#3A4A3E]'
           }`}
-          title={isCameraOff ? 'Bật Camera (Mô phỏng)' : 'Tắt Camera (Mô phỏng)'}
+          title={
+            isCameraLoading
+              ? 'Đang khởi động camera...'
+              : isCameraOff
+              ? 'Bật Camera thật'
+              : 'Tắt Camera thật'
+          }
         >
-          {isCameraOff ? <VideoOff className="w-4.5 h-4.5 sm:w-5 sm:h-5" /> : <Video className="w-4.5 h-4.5 sm:w-5 sm:h-5" />}
+          {isCameraLoading ? (
+            <span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-[#83A58E] animate-spin" />
+          ) : isCameraOff ? (
+            <VideoOff className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+          ) : (
+            <Video className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+          )}
+          {cameraError && isCameraOff && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D]" />
+          )}
         </button>
 
         {/* Share Screen */}
