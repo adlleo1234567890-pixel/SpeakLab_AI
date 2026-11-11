@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PracticeSession, PracticeMode, PresentationDeck } from '../types';
+import { PracticeSession, PracticeMode, PresentationDeck, VirtualParticipant, PracticeModeType } from '../types';
 import {
   mockPracticeSessions,
   mockPracticeModes,
   mockPresentationDecks,
+  generateVirtualParticipants,
 } from '../data/mockData';
 
 class SessionService {
@@ -31,7 +32,33 @@ class SessionService {
    * Lấy danh sách lịch sử các buổi luyện tập
    */
   getRecentSessions(): PracticeSession[] {
-    return this.sessions;
+    return [...this.sessions];
+  }
+
+  /**
+   * Tính toán các chỉ số thống kê toán học chính xác từ danh sách phiên
+   */
+  getUserStats() {
+    const totalSessions = this.sessions.length;
+    const totalSeconds = this.sessions.reduce((acc, s) => acc + s.durationSeconds, 0);
+    const totalMinutes = Math.round(totalSeconds / 60);
+    const avgMinutesPerSession = totalSessions > 0 ? Math.round(totalMinutes / totalSessions) : 0;
+    const totalReports = this.sessions.filter((s) => !!s.reportId).length;
+
+    return {
+      totalSessions,
+      totalPracticeMinutes: totalMinutes,
+      avgMinutesPerSession,
+      totalReports,
+      improvementPercentage: 32, // Chỉ số minh họa
+    };
+  }
+
+  /**
+   * Lấy danh sách người tham dự mô phỏng chính xác theo số lượng và chế độ
+   */
+  getParticipantsForSession(count: number, mode: PracticeModeType): VirtualParticipant[] {
+    return generateVirtualParticipants(count, mode);
   }
 
   /**
@@ -46,7 +73,7 @@ class SessionService {
    */
   createSession(params: {
     title: string;
-    modeId: 'basic' | 'defense' | 'debate';
+    modeId: PracticeModeType;
     deckId: string;
     participantCount: number;
     durationMinutes: number;
@@ -66,6 +93,7 @@ class SessionService {
       createdAt: 'Vừa xong',
       status: 'in_progress',
       score: undefined,
+      reportId: 'rep_01', // Link to demo report
     };
 
     this.sessions.unshift(newSession);

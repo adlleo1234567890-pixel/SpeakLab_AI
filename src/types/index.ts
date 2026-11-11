@@ -122,9 +122,18 @@ export interface UserProfile {
   stats: {
     totalSessions: number;
     totalPracticeMinutes: number;
+    avgMinutesPerSession: number;
     totalReports: number;
     improvementPercentage: number;
   };
+}
+
+export interface PracticeSetupConfig {
+  title: string;
+  modeId: PracticeModeType;
+  deckId: string;
+  participantCount: number;
+  durationMinutes: number;
 }
 
 export type ActivePage = 

@@ -100,7 +100,7 @@ export const PresenterCameraBox: React.FC<PresenterCameraBoxProps> = ({
         <div className="flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-[#83A58E]" />
           <span className="text-[10px] uppercase font-bold tracking-wider text-[#83A58E]">
-            Giao diện HUD AI
+            Chỉ số HUD AI (Mô phỏng)
           </span>
         </div>
 

@@ -14,7 +14,6 @@ import {
   FileText,
   Settings,
   PhoneOff,
-  Sparkles,
   Presentation
 } from 'lucide-react';
 
@@ -48,7 +47,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   onEndMeeting,
 }) => {
   return (
-    <div className="h-16 md:h-18 bg-[#1B221D] border-t border-[#2D3930] px-4 flex items-center justify-between shadow-2xl z-30">
+    <div className="h-16 md:h-18 bg-[#1B221D] border-t border-[#2D3930] px-3 md:px-6 flex items-center justify-between shadow-2xl z-30 shrink-0">
       {/* Left: Session metadata & Mode indicator */}
       <div className="hidden lg:flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-lg bg-[#27332A] border border-[#3A4A3E] flex items-center justify-center text-[#83A58E]">
@@ -64,12 +63,12 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         </div>
       </div>
 
-      {/* Center: Main control buttons */}
-      <div className="flex items-center gap-2 md:gap-3 mx-auto">
+      {/* Center: Main control buttons (Min 44px touch target) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 mx-auto">
         {/* Microphone */}
         <button
           onClick={onToggleMic}
-          className={`p-3 rounded-xl transition-all cursor-pointer flex flex-col items-center gap-1 ${
+          className={`min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             isMuted
               ? 'bg-[#3D2625] text-[#F09995] hover:bg-[#4D302F] border border-[#5E3230]'
               : 'bg-[#27332A] text-white hover:bg-[#344438] border border-[#3A4A3E]'
@@ -82,7 +81,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Camera */}
         <button
           onClick={onToggleCamera}
-          className={`p-3 rounded-xl transition-all cursor-pointer flex flex-col items-center gap-1 ${
+          className={`min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             isCameraOff
               ? 'bg-[#3D2625] text-[#F09995] hover:bg-[#4D302F] border border-[#5E3230]'
               : 'bg-[#27332A] text-white hover:bg-[#344438] border border-[#3A4A3E]'
@@ -95,7 +94,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Share Screen (notice) */}
         <button
           onClick={onShareScreenClick}
-          className="p-3 rounded-xl bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E] transition-all cursor-pointer hidden sm:flex items-center justify-center"
+          className="min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E] transition-all cursor-pointer hidden sm:flex items-center justify-center"
           title="Chia sẻ màn hình (Tính năng Đợt 2)"
         >
           <Share2 className="w-5 h-5" />
@@ -104,7 +103,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Attendees List Toggle */}
         <button
           onClick={onToggleAttendees}
-          className={`p-3 rounded-xl transition-all cursor-pointer relative ${
+          className={`min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer relative flex items-center justify-center ${
             isAttendeesOpen
               ? 'bg-[#83A58E] text-white font-semibold'
               : 'bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E]'
@@ -120,7 +119,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Presenter Notes */}
         <button
           onClick={onToggleNotes}
-          className={`p-3 rounded-xl transition-all cursor-pointer ${
+          className={`min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             isNotesOpen
               ? 'bg-[#83A58E] text-white font-semibold'
               : 'bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E]'
@@ -133,7 +132,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {/* Settings */}
         <button
           onClick={onOpenSettings}
-          className="p-3 rounded-xl bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E] transition-all cursor-pointer"
+          className="min-h-[44px] min-w-[44px] p-2.5 sm:p-3 rounded-xl bg-[#27332A] text-[#A8B6AB] hover:text-white hover:bg-[#344438] border border-[#3A4A3E] transition-all cursor-pointer flex items-center justify-center"
           title="Cài đặt phòng họp mô phỏng"
         >
           <Settings className="w-5 h-5" />
@@ -141,10 +140,11 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
       </div>
 
       {/* Right: End Meeting CTA */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={onEndMeeting}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#873631] hover:bg-[#A33E37] text-white text-xs font-semibold transition-all shadow-md cursor-pointer"
+          className="min-h-[44px] flex items-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl bg-[#873631] hover:bg-[#A33E37] text-white text-xs font-semibold transition-all shadow-md cursor-pointer"
+          title="Kết thúc buổi luyện thuyết trình"
         >
           <PhoneOff className="w-4 h-4" />
           <span className="hidden sm:inline">Kết thúc buổi luyện</span>

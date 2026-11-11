@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Presentation,
   Shield,
@@ -17,13 +17,14 @@ import {
   Info,
   Check,
   CheckCircle2,
-  FileUp,
-  Sliders
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import {
   PracticeModeType,
   PracticeMode,
-  PresentationDeck
+  PresentationDeck,
+  PracticeSetupConfig
 } from '../types';
 import { Button } from '../components/ui/Button';
 import { DemoNotice } from '../components/ui/DemoNotice';
@@ -31,28 +32,50 @@ import { DemoNotice } from '../components/ui/DemoNotice';
 interface PracticeSetupPageProps {
   availableModes: PracticeMode[];
   availableDecks: PresentationDeck[];
-  onStartSession: (config: {
-    title: string;
-    modeId: PracticeModeType;
-    deckId: string;
-    participantCount: number;
-    durationMinutes: number;
-  }) => void;
+  initialConfig?: PracticeSetupConfig;
+  onConfigChange?: (config: PracticeSetupConfig) => void;
+  onStartSession: (config: PracticeSetupConfig) => void;
   onCancel: () => void;
 }
 
 export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
   availableModes,
   availableDecks,
+  initialConfig,
+  onConfigChange,
   onStartSession,
   onCancel,
 }) => {
-  const [selectedModeId, setSelectedModeId] = useState<PracticeModeType>('defense');
-  const [sessionTitle, setSessionTitle] = useState('Bảo vệ Đề tài: Phân loại Rác Thông minh bằng AI');
-  const [selectedDeckId, setSelectedDeckId] = useState<string>(availableDecks[0]?.id || '');
-  const [participantCount, setParticipantCount] = useState<number>(6);
-  const [durationMinutes, setDurationMinutes] = useState<number>(10);
+  const [selectedModeId, setSelectedModeId] = useState<PracticeModeType>(
+    initialConfig?.modeId || 'defense'
+  );
+  const [sessionTitle, setSessionTitle] = useState(
+    initialConfig?.title || 'Bảo vệ Đề tài: Phân loại Rác Thông minh bằng AI'
+  );
+  const [selectedDeckId, setSelectedDeckId] = useState<string>(
+    initialConfig?.deckId || availableDecks[0]?.id || ''
+  );
+  const [participantCount, setParticipantCount] = useState<number>(
+    initialConfig?.participantCount || 6
+  );
+  const [durationMinutes, setDurationMinutes] = useState<number>(
+    initialConfig?.durationMinutes || 12
+  );
+  const [expandedMobileModeId, setExpandedMobileModeId] = useState<PracticeModeType | null>(null);
   const [showUploadNotice, setShowUploadNotice] = useState(false);
+
+  // Sync back to parent whenever config changes so returning to this page retains choices
+  useEffect(() => {
+    if (onConfigChange) {
+      onConfigChange({
+        title: sessionTitle,
+        modeId: selectedModeId,
+        deckId: selectedDeckId,
+        participantCount,
+        durationMinutes,
+      });
+    }
+  }, [sessionTitle, selectedModeId, selectedDeckId, participantCount, durationMinutes, onConfigChange]);
 
   const selectedMode =
     availableModes.find((m) => m.id === selectedModeId) || availableModes[0];
@@ -61,7 +84,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
 
   const handleStart = () => {
     onStartSession({
-      title: sessionTitle || `Buổi luyện: ${selectedMode.title}`,
+      title: sessionTitle.trim() || `Buổi luyện: ${selectedMode.title}`,
       modeId: selectedModeId,
       deckId: selectedDeckId,
       participantCount,
@@ -81,14 +104,14 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
       {/* Top Banner */}
       <DemoNotice
         title="Thiết lập phòng luyện tập mô phỏng"
         message="Trong Đợt 1, các thông số phòng họp và hội đồng được mô phỏng trực quan để bạn làm quen với trải nghiệm trước khi kết nối hệ thống phân tích AI."
       />
 
-      <div className="bg-white rounded-2xl border border-[#E4E9E3] p-6 md:p-8 shadow-xs space-y-8">
+      <div className="bg-white rounded-2xl border border-[#E4E9E3] p-5 md:p-8 shadow-xs space-y-8">
         {/* Section 1: Choose Practice Mode */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -97,7 +120,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                 1. Chọn chế độ luyện tập
               </h3>
               <p className="text-xs text-[#768078] mt-0.5">
-                Mỗi chế độ có cấu hình hội đồng và mức độ phản biện khác nhau
+                Mỗi chế độ có kịch bản hội đồng và mức độ phản biện khác nhau
               </p>
             </div>
             <span className="text-xs font-semibold text-[#4A6453] bg-[#EEF4F0] px-2.5 py-1 rounded-md border border-[#D9E5DC]">
@@ -105,9 +128,10 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
             {availableModes.map((mode) => {
               const isSelected = selectedModeId === mode.id;
+              const isMobileExpanded = expandedMobileModeId === mode.id;
 
               return (
                 <div
@@ -116,20 +140,25 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                     setSelectedModeId(mode.id);
                     setDurationMinutes(mode.defaultDurationMinutes);
                   }}
-                  className={`relative p-5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`relative p-4 md:p-5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                     isSelected
                       ? 'bg-[#F2F6F3] border-[#83A58E] shadow-sm ring-1 ring-[#83A58E]'
                       : 'bg-white border-[#E4E9E3] hover:border-[#83A58E]/60 hover:bg-[#F7F9F6]'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2 md:mb-3">
                       <div className="w-9 h-9 rounded-lg bg-white border border-[#E4E9E3] flex items-center justify-center shadow-2xs">
                         {getModeIcon(mode.id)}
                       </div>
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-white border border-[#E4E9E3] text-[#556057]">
-                        {mode.difficulty}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-white border border-[#E4E9E3] text-[#556057]">
+                          {mode.difficulty}
+                        </span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-[#83A58E]" />
+                        )}
+                      </div>
                     </div>
 
                     <h4 className="text-sm font-bold text-[#3D4740]">
@@ -139,19 +168,33 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                       {mode.tagline}
                     </p>
 
-                    <ul className="mt-3.5 space-y-1.5 text-[11px] text-[#556057]">
+                    {/* Features list: always shown on desktop, toggleable on mobile */}
+                    <div className={`${isMobileExpanded ? 'block' : 'hidden md:block'} mt-3.5 space-y-1.5 text-[11px] text-[#556057]`}>
                       {mode.highlightFeatures.map((feat, idx) => (
-                        <li key={idx} className="flex items-start gap-1.5">
+                        <div key={idx} className="flex items-start gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-[#5A7D65] shrink-0 mt-0.5" />
                           <span>{feat}</span>
-                        </li>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
+
+                    {/* Mobile toggle to expand/collapse details */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedMobileModeId(isMobileExpanded ? null : mode.id);
+                      }}
+                      className="md:hidden mt-2 text-[11px] font-semibold text-[#4A6453] flex items-center gap-1"
+                    >
+                      <span>{isMobileExpanded ? 'Thu gọn chi tiết' : 'Xem chi tiết tiêu chí'}</span>
+                      {isMobileExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-[#E4E9E3]/70 flex items-center justify-between text-[11px] text-[#768078]">
                     <span>
-                      {mode.juryCount} giám khảo · {mode.audienceCount} thính giả
+                      Gợi ý: {mode.juryCount} giám khảo · {mode.audienceCount} thính giả
                     </span>
                     <span className="font-medium text-[#3D4740]">
                       ~{mode.defaultDurationMinutes} phút
@@ -181,7 +224,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                 placeholder="Ví dụ: Thuyết trình Dự án Nghiên cứu Khoa học 2026..."
                 className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-[#E4E9E3] text-sm text-[#3D4740] focus:outline-none focus:ring-2 focus:ring-[#83A58E] focus:border-transparent transition-all shadow-2xs"
               />
-              <div className="flex flex-wrap items-center gap-2 mt-2">
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <span className="text-[11px] text-[#768078]">Gợi ý nhanh:</span>
                 {[
                   'Bảo vệ Đề tài: AI Phân loại Rác Học đường',
@@ -203,23 +246,26 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               {/* Target Duration */}
               <div>
-                <label className="block text-xs font-semibold text-[#3D4740] mb-1.5 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#5A7D65]" />
-                  <span>Thời lượng mục tiêu</span>
+                <label className="block text-xs font-semibold text-[#3D4740] mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#5A7D65]" />
+                    <span>Thời lượng mục tiêu</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-[#3D5C46]">{durationMinutes} phút</span>
                 </label>
                 <div className="flex items-center gap-2">
-                  {[5, 10, 15, 20].map((mins) => (
+                  {[5, 10, 12, 15, 20].map((mins) => (
                     <button
                       key={mins}
                       type="button"
                       onClick={() => setDurationMinutes(mins)}
                       className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
                         durationMinutes === mins
-                          ? 'bg-[#EEF4F0] text-[#324C3B] border-[#83A58E] font-semibold'
+                          ? 'bg-[#EEF4F0] text-[#324C3B] border-[#83A58E] font-semibold ring-1 ring-[#83A58E]'
                           : 'bg-white text-[#556057] border-[#E4E9E3] hover:bg-[#F7F9F6]'
                       }`}
                     >
-                      {mins} phút
+                      {mins}p
                     </button>
                   ))}
                 </div>
@@ -227,9 +273,12 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
 
               {/* Participant Count */}
               <div>
-                <label className="block text-xs font-semibold text-[#3D4740] mb-1.5 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-[#5A7D65]" />
-                  <span>Quy mô thính giả mô phỏng</span>
+                <label className="block text-xs font-semibold text-[#3D4740] mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-[#5A7D65]" />
+                    <span>Quy mô thính giả mô phỏng (Không gồm bạn)</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-[#3D5C46]">{participantCount} người</span>
                 </label>
                 <div className="flex items-center gap-2">
                   {[3, 6, 10, 15].map((cnt) => (
@@ -239,7 +288,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                       onClick={() => setParticipantCount(cnt)}
                       className={`flex-1 py-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
                         participantCount === cnt
-                          ? 'bg-[#EEF4F0] text-[#324C3B] border-[#83A58E] font-semibold'
+                          ? 'bg-[#EEF4F0] text-[#324C3B] border-[#83A58E] font-semibold ring-1 ring-[#83A58E]'
                           : 'bg-white text-[#556057] border-[#E4E9E3] hover:bg-[#F7F9F6]'
                       }`}
                     >
@@ -249,6 +298,10 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                 </div>
               </div>
             </div>
+
+            <p className="text-[11px] text-[#768078] italic pt-1">
+              * Hệ thống sẽ khởi tạo chính xác {participantCount} người tham dự (phân bổ hội đồng giám khảo và thính giả theo chế độ) khi bạn vào phòng.
+            </p>
           </div>
         </div>
 
@@ -263,8 +316,8 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
                 Chọn bộ slide mẫu hoặc xem trước khu vực tải tệp trình chiếu
               </p>
             </div>
-            <span className="text-xs text-[#768078]">
-              {selectedDeck.slides.length} trang slide
+            <span className="text-xs font-semibold text-[#4A6453] bg-[#EEF4F0] px-2.5 py-1 rounded-md border border-[#D9E5DC]">
+              Đang chọn: {selectedDeck.slides.length} trang slide
             </span>
           </div>
 
@@ -302,8 +355,8 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
 
           {/* Upload Placeholder for Phase 2 */}
           <div
-            onClick={() => setShowUploadNotice(true)}
-            className="border-2 border-dashed border-[#D9E5DC] rounded-xl p-6 text-center hover:bg-[#F7F9F6] transition-colors cursor-pointer group"
+            onClick={() => setShowUploadNotice(!showUploadNotice)}
+            className="border-2 border-dashed border-[#D9E5DC] rounded-xl p-5 md:p-6 text-center hover:bg-[#F7F9F6] transition-colors cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-full bg-[#EEF4F0] text-[#4A6453] flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform">
               <Upload className="w-5 h-5" />
@@ -312,7 +365,7 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
               Tải lên tệp slide PowerPoint (.pptx) hoặc PDF của bạn
             </p>
             <p className="text-[11px] text-[#768078] mt-1">
-              Khu vực chuẩn bị cho Đợt 2 · Hiện tại hệ thống sử dụng các bộ slide mẫu phong phú có sẵn
+              Tính năng dự kiến Đợt 2 · Hiện tại hệ thống sử dụng các bộ slide mẫu phong phú có sẵn
             </p>
             <span className="inline-block mt-2 text-[10px] font-medium text-[#556057] bg-white px-2.5 py-0.5 rounded border border-[#E4E9E3]">
               Bấm để xem thông tin tính năng
@@ -320,14 +373,14 @@ export const PracticeSetupPage: React.FC<PracticeSetupPageProps> = ({
           </div>
 
           {showUploadNotice && (
-            <div className="mt-3 p-3 rounded-lg bg-[#FAFBF9] border border-[#E4E9E3] text-xs text-[#556057] flex items-start gap-2">
+            <div className="mt-3 p-3 rounded-lg bg-[#FAFBF9] border border-[#E4E9E3] text-xs text-[#556057] flex items-start gap-2 animate-in fade-in">
               <Info className="w-4 h-4 text-[#83A58E] shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-[#3D4740]">
                   Ghi chú phạm vi Đợt 1
                 </p>
                 <p className="mt-0.5 text-[#768078]">
-                  Để đảm bảo tính độc lập và kiểm thử UI/UX mượt mà, ở Đợt 1 bạn có thể sử dụng các bộ slide mẫu tương tác đầy đủ đã được tích hợp sẵn phía trên. Trình parser tệp PPTX/PDF trực tiếp từ máy tính sẽ được bổ sung ở Đợt 2.
+                  Để đảm bảo tính độc lập và kiểm thử UI/UX mượt mà, ở Đợt 1 bạn có thể sử dụng các bộ slide mẫu tương tác đầy đủ đã được tích hợp sẵn phía trên. Trình parser tệp PPTX/PDF trực tiếp từ máy tính sẽ được bổ sung ở Đợt 2 mà không tạo hành vi upload giả.
                 </p>
               </div>
             </div>

@@ -21,6 +21,7 @@ import { ActivePage } from '../../types';
 interface SidebarProps {
   activePage: ActivePage;
   onNavigate: (page: ActivePage) => void;
+  sessionCount?: number;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -28,6 +29,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   activePage,
   onNavigate,
+  sessionCount = 6,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
@@ -48,7 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'history' as ActivePage,
       label: 'Lịch sử luyện tập',
       icon: History,
-      badge: '4 buổi',
+      badge: `${sessionCount} buổi`,
     },
     {
       id: 'report' as ActivePage,

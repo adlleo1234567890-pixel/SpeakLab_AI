@@ -125,75 +125,75 @@ export const ReportPage: React.FC<ReportPageProps> = ({
       {/* KPI Stat Cards Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Overall Score */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Điểm tổng quan</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Điểm tổng quan (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D5C46] tabular-nums">
               {report.overallScore}
             </span>
             <span className="text-xs text-[#768078]">/ 10</span>
           </div>
-          <p className="text-[10px] text-[#5A7D65] mt-1 font-semibold">Xuất sắc</p>
+          <p className="text-[10px] text-[#5A7D65] mt-1 font-semibold truncate">Xuất sắc (Minh họa)</p>
         </div>
 
         {/* Speech Pace */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Tốc độ nói trung bình</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Tốc độ nói (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {report.metrics.speechPaceWpm}
             </span>
             <span className="text-xs text-[#768078]">từ/phút</span>
           </div>
-          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium">Khoảng chuẩn (120-140)</p>
+          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium truncate">Khoảng chuẩn (120-140)</p>
         </div>
 
         {/* Eye Contact */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Giao tiếp mắt</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Giao tiếp mắt (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {report.metrics.eyeContactPercentage}%
             </span>
             <span className="text-xs text-[#768078]">thời lượng</span>
           </div>
-          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium">Tập trung hội đồng</p>
+          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium truncate">Tập trung hội đồng</p>
         </div>
 
         {/* Filler Words */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Từ đệm ngập ngừng</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Từ đệm (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {report.metrics.fillerWordsCount}
             </span>
             <span className="text-xs text-[#768078]">lần</span>
           </div>
-          <p className="text-[10px] text-[#768078] mt-1">Giảm 4 lần so với bài trước</p>
+          <p className="text-[10px] text-[#768078] mt-1 truncate">Số liệu minh họa</p>
         </div>
 
         {/* Clarity */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Rõ ràng mạch lạc</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Mạch lạc (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {report.metrics.clarityScore}
             </span>
             <span className="text-xs text-[#768078]">/ 10</span>
           </div>
-          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium">Truyền đạt rành mạch</p>
+          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium truncate">Truyền đạt rành mạch</p>
         </div>
 
         {/* Defense score */}
-        <div className="bg-white rounded-xl border border-[#E4E9E3] p-4 shadow-xs">
-          <span className="text-[11px] font-medium text-[#768078]">Phản biện bảo vệ</span>
+        <div className="bg-white rounded-xl border border-[#E4E9E3] p-3.5 sm:p-4 shadow-xs">
+          <span className="text-[11px] font-medium text-[#768078] block truncate">Phản biện (Demo)</span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {report.metrics.defenseScore}
             </span>
             <span className="text-xs text-[#768078]">/ 10</span>
           </div>
-          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium">Lập luận có dẫn chứng</p>
+          <p className="text-[10px] text-[#5A7D65] mt-1 font-medium truncate">Lập luận có dẫn chứng</p>
         </div>
       </div>
 

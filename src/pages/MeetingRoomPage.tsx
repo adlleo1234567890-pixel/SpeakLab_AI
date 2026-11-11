@@ -6,8 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Clock,
-  Circle,
-  FileCheck,
   ChevronLeft,
   Users,
   Presentation,
@@ -15,7 +13,9 @@ import {
   Info,
   Sliders,
   Share2,
-  AlertCircle
+  Video,
+  Layers,
+  HelpCircle
 } from 'lucide-react';
 import {
   UserProfile,
@@ -65,23 +65,26 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCameraNoticeModal, setShowCameraNoticeModal] = useState(false);
+  const [showTitleDetailModal, setShowTitleDetailModal] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<{
     judge: string;
     text: string;
   } | null>(null);
 
-  // Mobile View Switcher: 'slide' | 'stage'
-  const [mobileTab, setMobileTab] = useState<'slide' | 'stage'>('slide');
+  // Mobile View Switcher: 'slide' | 'audience' | 'camera'
+  const [mobileTab, setMobileTab] = useState<'slide' | 'audience' | 'camera'>('slide');
 
-  // Elapsed time counter
+  // Elapsed time counter with clean lifecycle management
   useEffect(() => {
-    let interval: any;
+    let interval: NodeJS.Timeout | null = null;
     if (isTimerRunning) {
       interval = setInterval(() => {
         setElapsedSeconds((prev) => prev + 1);
       }, 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isTimerRunning]);
 
   const formatTimer = (totalSecs: number) => {
@@ -110,24 +113,28 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#181F1A] text-white">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#181F1A] text-white select-none">
       {/* 1. Meeting Top Bar */}
-      <header className="h-14 bg-[#1E2620] border-b border-[#2C382F] px-4 flex items-center justify-between z-30 shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="h-14 bg-[#1E2620] border-b border-[#2C382F] px-3 md:px-5 flex items-center justify-between z-30 shrink-0 gap-2">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg text-[#A8B6AB] hover:text-white hover:bg-[#2A362D] transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-[#A8B6AB] hover:text-white hover:bg-[#2A362D] transition-colors cursor-pointer shrink-0"
             title="Thoát về Tổng quan"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xs md:text-sm font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-md">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1
+                onClick={() => setShowTitleDetailModal(true)}
+                className="text-xs md:text-sm font-bold text-white tracking-tight truncate max-w-[130px] sm:max-w-xs md:max-w-md cursor-pointer hover:underline"
+                title="Bấm để xem tên đầy đủ"
+              >
                 {session.title}
               </h1>
-              <span className="hidden sm:inline-block text-[10px] font-semibold text-[#83A58E] bg-[#28352B] px-2 py-0.5 rounded border border-[#38493B]">
+              <span className="hidden sm:inline-block text-[10px] font-semibold text-[#83A58E] bg-[#28352B] px-2 py-0.5 rounded border border-[#38493B] shrink-0">
                 {session.modeTitle}
               </span>
             </div>
@@ -138,7 +145,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         </div>
 
         {/* Center: Live timer & Recording status */}
-        <div className="flex items-center gap-3 bg-[#151C17] px-3 py-1.5 rounded-lg border border-[#2A362D]">
+        <div className="flex items-center gap-2 sm:gap-3 bg-[#151C17] px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#2A362D] shrink-0">
           <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-[#83A58E]">
             <span className="w-2 h-2 rounded-full bg-[#E5484D] animate-ping" />
             <span className="tabular-nums">{formatTimer(elapsedSeconds)}</span>
@@ -150,31 +157,39 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </span>
         </div>
 
-        {/* Right: End button and Attendee counter */}
-        <div className="flex items-center gap-2">
-          {/* Mobile Tab switchers */}
-          <div className="md:hidden flex items-center bg-[#253027] p-0.5 rounded-lg border border-[#37473A]">
+        {/* Right: Mobile View Tabs & End button */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Mobile Tab switchers (Slide / Audience / Camera) */}
+          <div className="lg:hidden flex items-center bg-[#253027] p-0.5 rounded-lg border border-[#37473A]">
             <button
               onClick={() => setMobileTab('slide')}
-              className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${
+              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
                 mobileTab === 'slide' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
               }`}
             >
               Slide
             </button>
             <button
-              onClick={() => setMobileTab('stage')}
-              className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${
-                mobileTab === 'stage' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
+              onClick={() => setMobileTab('audience')}
+              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
+                mobileTab === 'audience' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
               }`}
             >
-              Hội đồng
+              Hội đồng ({participants.length})
+            </button>
+            <button
+              onClick={() => setMobileTab('camera')}
+              className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${
+                mobileTab === 'camera' ? 'bg-[#83A58E] text-white' : 'text-[#A8B6AB]'
+              }`}
+            >
+              Camera
             </button>
           </div>
 
           <button
             onClick={() => setShowEndModal(true)}
-            className="text-xs px-3 py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white font-medium transition-colors cursor-pointer"
+            className="text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#873631] hover:bg-[#A33E37] text-white font-medium transition-colors cursor-pointer shrink-0"
           >
             Kết thúc
           </button>
@@ -183,7 +198,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
       {/* Simulated Question Banner / Toast if triggered */}
       {activeQuestion && (
-        <div className="bg-[#2D3930] border-b border-[#3E4F41] px-4 py-2.5 flex items-center justify-between text-xs animate-in slide-in-from-top duration-200">
+        <div className="bg-[#2D3930] border-b border-[#3E4F41] px-4 py-2.5 flex items-center justify-between text-xs animate-in slide-in-from-top duration-200 z-20">
           <div className="flex items-start gap-2.5">
             <span className="w-2 h-2 rounded-full bg-[#E8C27B] mt-1.5 shrink-0" />
             <div>
@@ -195,7 +210,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </div>
           <button
             onClick={() => setActiveQuestion(null)}
-            className="text-[#A8B6AB] hover:text-white px-2 py-1 ml-4 rounded bg-[#1C241E] text-[11px] shrink-0"
+            className="text-[#A8B6AB] hover:text-white px-2.5 py-1 ml-4 rounded bg-[#1C241E] text-[11px] shrink-0 border border-[#3A4A3E]"
           >
             Đã trả lời / Đóng
           </button>
@@ -203,11 +218,19 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       )}
 
       {/* 2. Main Conference Stage (Responsive Layout) */}
-      <div className="flex-1 flex overflow-hidden p-2 md:p-4 gap-3 relative">
+      <div className="flex-1 flex overflow-hidden p-2 md:p-4 gap-3 relative min-h-0">
         {/* Left / Center Work Area */}
-        <div className="flex-1 flex flex-col gap-3 min-w-0 overflow-y-auto">
-          {/* Top Audience & Juror Video Strip (Horizontal Carousel) */}
-          <div className={`shrink-0 ${mobileTab === 'stage' ? 'block' : 'hidden md:block'}`}>
+        <div className="flex-1 flex flex-col gap-2 md:gap-3 min-w-0 min-h-0 overflow-hidden">
+          {/* Top Audience & Juror Video Strip (Horizontal Carousel on Desktop or when mobileTab === 'audience') */}
+          <div
+            className={`shrink-0 ${
+              mobileTab === 'audience' ? 'block flex-1 overflow-y-auto' : 'hidden lg:block'
+            }`}
+          >
+            <div className="flex items-center justify-between text-[11px] text-[#A8B6AB] mb-1.5 px-1">
+              <span>Hội đồng mô phỏng ({participants.length} người)</span>
+              <span className="text-[10px] text-[#83A58E]">Bấm vào giám khảo để mô phỏng đặt câu hỏi</span>
+            </div>
             <ParticipantGrid
               participants={participants}
               onParticipantClick={(p) => handleTriggerSimulatedQuestion(p.name)}
@@ -215,11 +238,11 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </div>
 
           {/* Main Presentation Stage & Presenter Camera Tile */}
-          <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
+          <div className="flex-1 flex flex-col lg:flex-row gap-2 md:gap-3 min-h-0 overflow-hidden">
             {/* Slide Presentation Canvas */}
             <div
-              className={`flex-1 flex flex-col min-h-0 ${
-                mobileTab === 'slide' ? 'flex' : 'hidden md:flex'
+              className={`flex-1 flex flex-col min-h-0 h-full overflow-hidden ${
+                mobileTab === 'slide' ? 'flex' : 'hidden lg:flex'
               }`}
             >
               <SlideViewer
@@ -234,10 +257,10 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
               />
             </div>
 
-            {/* Presenter Camera Box (Sidebar on large screens or docked below) */}
+            {/* Presenter Camera Box (Sidebar on large screens or dedicated tab on mobile) */}
             <div
               className={`lg:w-80 shrink-0 flex flex-col gap-3 ${
-                mobileTab === 'stage' ? 'block' : 'hidden lg:flex'
+                mobileTab === 'camera' ? 'flex flex-1 overflow-y-auto' : 'hidden lg:flex'
               }`}
             >
               <PresenterCameraBox
@@ -267,7 +290,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
                   <span>Hội đồng: {participants.filter((p) => p.role === 'judge').length} giám khảo</span>
                   <button
                     onClick={() => setIsNotesOpen(true)}
-                    className="text-[#83A58E] hover:underline font-medium"
+                    className="text-[#83A58E] hover:underline font-medium cursor-pointer"
                   >
                     Xem kịch bản thoại
                   </button>
@@ -318,16 +341,56 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
 
       {/* 4. Modals */}
 
+      {/* Title Details Modal for Mobile */}
+      <Modal
+        isOpen={showTitleDetailModal}
+        onClose={() => setShowTitleDetailModal(false)}
+        title="Thông tin buổi thuyết trình"
+        subtitle="Chi tiết cấu hình phòng họp mô phỏng"
+        footer={
+          <Button variant="primary" size="sm" onClick={() => setShowTitleDetailModal(false)}>
+            Đóng
+          </Button>
+        }
+      >
+        <div className="space-y-3 text-xs text-[#3D4740]">
+          <div>
+            <span className="text-[#768078] block text-[11px]">Tên đề tài:</span>
+            <p className="font-bold text-sm mt-0.5">{session.title}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E4E9E3]">
+            <div>
+              <span className="text-[#768078] text-[11px]">Chế độ:</span>
+              <p className="font-semibold text-[#4A6453]">{session.modeTitle}</p>
+            </div>
+            <div>
+              <span className="text-[#768078] text-[11px]">Chủ đề:</span>
+              <p className="font-semibold">{session.topic}</p>
+            </div>
+            <div>
+              <span className="text-[#768078] text-[11px]">Thời lượng mục tiêu:</span>
+              <p className="font-semibold font-mono">{Math.floor(session.durationSeconds / 60)} phút</p>
+            </div>
+            <div>
+              <span className="text-[#768078] text-[11px]">Thính giả mô phỏng:</span>
+              <p className="font-semibold">{participants.length} người</p>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       {/* End Meeting Confirmation Modal */}
       <EndMeetingModal
         isOpen={showEndModal}
         onClose={() => setShowEndModal(false)}
         elapsedSeconds={elapsedSeconds}
         onConfirmViewReport={() => {
+          setIsTimerRunning(false);
           setShowEndModal(false);
           onFinishSession();
         }}
         onReturnToDashboard={() => {
+          setIsTimerRunning(false);
           setShowEndModal(false);
           onNavigate('dashboard');
         }}

@@ -91,14 +91,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="mt-3 flex flex-wrap items-baseline gap-1.5">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {currentUser.stats.totalSessions}
             </span>
             <span className="text-xs text-[#768078]">buổi hoàn thành</span>
           </div>
           <p className="text-[11px] text-[#5A7D65] mt-1 flex items-center gap-1 font-medium">
-            <TrendingUp className="w-3 h-3" /> 3 buổi trong tuần này
+            <TrendingUp className="w-3 h-3 shrink-0" />
+            <span>3 buổi trong tuần này</span>
           </p>
         </div>
 
@@ -110,14 +111,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="mt-3 flex flex-wrap items-baseline gap-1.5">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {(currentUser.stats.totalPracticeMinutes / 60).toFixed(1)}
             </span>
             <span className="text-xs text-[#768078]">giờ tích lũy</span>
           </div>
           <p className="text-[11px] text-[#768078] mt-1">
-            Trung bình 12 phút / buổi
+            Trung bình {currentUser.stats.avgMinutesPerSession || 12} phút / buổi
           </p>
         </div>
 
@@ -129,14 +130,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <FileCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="mt-3 flex flex-wrap items-baseline gap-1.5">
             <span className="text-2xl md:text-3xl font-bold text-[#3D4740] tabular-nums">
               {currentUser.stats.totalReports}
             </span>
             <span className="text-xs text-[#768078]">bản phân tích</span>
           </div>
           <p className="text-[11px] text-[#5A7D65] mt-1 flex items-center gap-1 font-medium">
-            <CheckCircle2 className="w-3 h-3" /> Điểm trung bình: 8.3/10
+            <CheckCircle2 className="w-3 h-3 shrink-0" />
+            <span>Điểm trung bình: 8.3/10 (Dữ liệu minh họa)</span>
           </p>
         </div>
 
@@ -148,14 +150,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <Award className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="mt-3 flex flex-wrap items-baseline gap-1.5">
             <span className="text-2xl md:text-3xl font-bold text-[#3D5C46] tabular-nums">
               +{currentUser.stats.improvementPercentage}%
             </span>
-            <span className="text-xs text-[#768078]">độ tự tin & lưu loát</span>
+            <span className="text-xs text-[#768078]">tự tin & lưu loát</span>
           </div>
           <p className="text-[11px] text-[#768078] mt-1">
-            Giảm 60% từ đệm "à, ừm"
+            (Dữ liệu minh họa cho Đợt 1)
           </p>
         </div>
       </div>
@@ -215,7 +217,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         <span className="text-xs font-bold text-[#3D5C46] tabular-nums">
                           {session.score.toFixed(1)}/10
                         </span>
-                        <p className="text-[10px] text-[#768078]">Điểm demo</p>
+                        <p className="text-[10px] text-[#768078]">Điểm demo (Minh họa)</p>
                       </div>
                     )}
 

@@ -13,6 +13,7 @@ interface AppLayoutProps {
   activePage: ActivePage;
   onNavigate: (page: ActivePage) => void;
   currentUser: UserProfile;
+  sessionCount?: number;
   children: React.ReactNode;
 }
 
@@ -20,6 +21,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   activePage,
   onNavigate,
   currentUser,
+  sessionCount,
   children,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -78,6 +80,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <Sidebar
         activePage={activePage}
         onNavigate={onNavigate}
+        sessionCount={sessionCount}
         isMobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
       />

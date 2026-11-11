@@ -3,19 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ActivePage,
   PracticeSession,
   PresentationDeck,
   VirtualParticipant,
-  PracticeModeType
+  PracticeSetupConfig
 } from './types';
 import {
   mockCurrentUser,
-  mockVirtualParticipants,
   mockPresentationDecks,
-  mockPracticeSessions
 } from './data/mockData';
 import { sessionService } from './services/sessionService';
 import { reportService } from './services/reportService';
@@ -31,43 +29,72 @@ import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
   const [activePage, setActivePage] = useState<ActivePage>('dashboard');
-  const [currentUser] = useState(mockCurrentUser);
   const [sessions, setSessions] = useState<PracticeSession[]>(sessionService.getRecentSessions());
+
+  // Setup configuration state retained in current session
+  const [setupConfig, setSetupConfig] = useState<PracticeSetupConfig>({
+    title: 'Bảo vệ Đề tài: Phân loại Rác Thông minh bằng AI',
+    modeId: 'defense',
+    deckId: 'deck_ai_waste',
+    participantCount: 6,
+    durationMinutes: 12,
+  });
+
+  // Calculate user profile stats dynamically from the actual sessions list
+  const userProfile = useMemo(() => {
+    const stats = sessionService.getUserStats();
+    return {
+      ...mockCurrentUser,
+      stats: {
+        ...mockCurrentUser.stats,
+        totalSessions: stats.totalSessions,
+        totalPracticeMinutes: stats.totalPracticeMinutes,
+        avgMinutesPerSession: stats.avgMinutesPerSession,
+        totalReports: stats.totalReports,
+      },
+    };
+  }, [sessions]);
 
   // Active Session State
   const [currentSession, setCurrentSession] = useState<PracticeSession>(sessions[0]);
   const [currentDeck, setCurrentDeck] = useState<PresentationDeck>(mockPresentationDecks[0]);
-  const [participants, setParticipants] = useState<VirtualParticipant[]>(mockVirtualParticipants);
+  const [participants, setParticipants] = useState<VirtualParticipant[]>(() =>
+    sessionService.getParticipantsForSession(6, 'defense')
+  );
   const [selectedReportId, setSelectedReportId] = useState<string>('rep_01');
 
   // Handle starting a new simulated practice session
-  const handleStartSession = (config: {
-    title: string;
-    modeId: PracticeModeType;
-    deckId: string;
-    participantCount: number;
-    durationMinutes: number;
-  }) => {
+  const handleStartSession = (config: PracticeSetupConfig) => {
+    // Save chosen config in state
+    setSetupConfig(config);
+
     const newSession = sessionService.createSession(config);
     const deck =
       mockPresentationDecks.find((d) => d.id === config.deckId) ||
       mockPresentationDecks[0];
 
-    // Filter or adjust participants based on requested count
-    const activeParticipants = mockVirtualParticipants.slice(
-      0,
-      Math.min(config.participantCount, mockVirtualParticipants.length)
+    // Generate EXACT number of virtual participants requested
+    const activeParticipants = sessionService.getParticipantsForSession(
+      config.participantCount,
+      config.modeId
     );
 
     setCurrentSession(newSession);
     setCurrentDeck(deck);
     setParticipants(activeParticipants);
-    setSessions([...sessionService.getRecentSessions()]);
+    setSessions(sessionService.getRecentSessions());
     setActivePage('meeting_room');
   };
 
   // Replay an existing session
   const handleReplaySession = (session: PracticeSession) => {
+    setSetupConfig({
+      title: session.title,
+      modeId: session.mode,
+      deckId: 'deck_ai_waste',
+      participantCount: session.participantCount,
+      durationMinutes: Math.round(session.durationSeconds / 60),
+    });
     setCurrentSession(session);
     setActivePage('practice_setup');
   };
@@ -88,11 +115,12 @@ export default function App() {
     <AppLayout
       activePage={activePage}
       onNavigate={(page) => setActivePage(page)}
-      currentUser={currentUser}
+      currentUser={userProfile}
+      sessionCount={sessions.length}
     >
       {activePage === 'dashboard' && (
         <DashboardPage
-          currentUser={currentUser}
+          currentUser={userProfile}
           recentSessions={sessions}
           onNavigate={(page) => setActivePage(page)}
           onSelectSessionForReport={handleSelectSessionForReport}
@@ -103,6 +131,8 @@ export default function App() {
         <PracticeSetupPage
           availableModes={sessionService.getAvailableModes()}
           availableDecks={sessionService.getAvailableDecks()}
+          initialConfig={setupConfig}
+          onConfigChange={setSetupConfig}
           onStartSession={handleStartSession}
           onCancel={() => setActivePage('dashboard')}
         />
@@ -110,7 +140,7 @@ export default function App() {
 
       {activePage === 'meeting_room' && (
         <MeetingRoomPage
-          currentUser={currentUser}
+          currentUser={userProfile}
           session={currentSession}
           deck={currentDeck}
           participants={participants}
@@ -140,7 +170,7 @@ export default function App() {
       )}
 
       {activePage === 'settings' && (
-        <SettingsPage currentUser={currentUser} />
+        <SettingsPage currentUser={userProfile} />
       )}
     </AppLayout>
   );

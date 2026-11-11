@@ -194,7 +194,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                     <span className="text-base font-bold text-[#3D5C46] tabular-nums">
                       {session.score.toFixed(1)}/10
                     </span>
-                    <p className="text-[10px] text-[#768078]">Điểm đánh giá</p>
+                    <p className="text-[10px] text-[#768078]">Điểm demo (Minh họa)</p>
                   </div>
                 )}
 

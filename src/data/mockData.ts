@@ -9,23 +9,9 @@ import {
   VirtualParticipant,
   PresentationDeck,
   PracticeSession,
-  EvaluationReport
+  EvaluationReport,
+  PracticeModeType
 } from '../types';
-
-export const mockCurrentUser: UserProfile = {
-  id: 'usr_01',
-  fullName: 'Nguyễn Minh Quân',
-  roleDescription: 'Học sinh Lớp 11A1 - Ban Tự nhiên',
-  school: 'Trường THPT Chuyên Khoa học Tự nhiên',
-  grade: 'Khối 11',
-  avatarInitials: 'MQ',
-  stats: {
-    totalSessions: 14,
-    totalPracticeMinutes: 285, // ~4.75 hours
-    totalReports: 11,
-    improvementPercentage: 32, // +32%
-  },
-};
 
 export const mockPracticeModes: PracticeMode[] = [
   {
@@ -33,7 +19,7 @@ export const mockPracticeModes: PracticeMode[] = [
     title: 'Luyện thuyết trình cơ bản',
     tagline: 'Rèn luyện phong thái, nhịp nói và kiểm soát thời gian',
     description: 'Phòng luyện tập tự do với thính giả mô phỏng lắng nghe thân thiện. Thích hợp chuẩn bị bài nói trước lớp hoặc thuyết trình nhóm.',
-    defaultDurationMinutes: 8,
+    defaultDurationMinutes: 10,
     juryCount: 1,
     audienceCount: 5,
     difficulty: 'Cơ bản',
@@ -47,14 +33,14 @@ export const mockPracticeModes: PracticeMode[] = [
     id: 'defense',
     title: 'Luyện bảo vệ trước ban giám khảo',
     tagline: 'Mô phỏng hội đồng thẩm định đồ án và nghiên cứu khoa học',
-    description: 'Hội đồng giám khảo mô phỏng gồm 3 chuyên gia phản biện. Giám khảo sẽ chú ý ghi chép tính logic, phương pháp và tính thuyết phục của luận điểm.',
+    description: 'Hội đồng giám khảo mô phỏng gồm các chuyên gia phản biện. Giám khảo sẽ chú ý ghi chép tính logic, phương pháp và tính thuyết phục của luận điểm.',
     defaultDurationMinutes: 12,
     juryCount: 3,
-    audienceCount: 4,
+    audienceCount: 3,
     difficulty: 'Nâng cao',
     highlightFeatures: [
-      'Hội đồng 3 giám khảo ghi chép phản biện chuyên sâu',
-      'Phát hiện lỗ hổng lập luận và dẫn chứng',
+      'Hội đồng giám khảo ghi chép phản biện chuyên sâu',
+      'Phát hiện lỗ hổng lập luận và số liệu',
       'Đánh giá phong thái tự tin và khả năng tương tác mắt',
     ],
   },
@@ -65,7 +51,7 @@ export const mockPracticeModes: PracticeMode[] = [
     description: 'Các tình huống mô phỏng thính giả ngắt lời, đặt câu hỏi xoáy sâu vào số liệu, yêu cầu bạn giữ bình tĩnh và lập luận phản bác sắc bén.',
     defaultDurationMinutes: 10,
     juryCount: 2,
-    audienceCount: 6,
+    audienceCount: 4,
     difficulty: 'Chuyên sâu',
     highlightFeatures: [
       'Tình huống chất vấn ngẫu nhiên mô phỏng',
@@ -186,11 +172,26 @@ export const mockPresentationDecks: PresentationDeck[] = [
         speakerNotes: 'Lợi thế lớn nhất của EcoHusk là nguồn nguyên liệu tại chỗ rẻ và quy trình ép nhiệt thân thiện không dùng hóa chất độc hại.',
         visualGraphicType: 'comparison',
       },
+      {
+        id: 'bp3',
+        slideNumber: 3,
+        title: 'Chiến lược phân phối & Hướng đi tương lai',
+        subtitle: 'Hợp tác cùng 12 chuỗi cà phê và đồ ăn nhanh học đường',
+        contentPoints: [
+          'Phân phối ban đầu qua mạng lưới trường học và căng-tin',
+          'Chứng nhận an toàn thực phẩm theo tiêu chuẩn quốc gia',
+          'Tái đầu tư 15% lợi nhuận vào quỹ phát triển mầm xanh',
+        ],
+        speakerNotes: 'Mục tiêu của chúng tôi không chỉ là bán sản phẩm mà là kiến tạo phong cách tiêu dùng xanh cho thế hệ trẻ.',
+        visualGraphicType: 'chart',
+      },
     ],
   },
 ];
 
-export const mockVirtualParticipants: VirtualParticipant[] = [
+// Unified participant pool (15 unique persons)
+export const fullParticipantPool: VirtualParticipant[] = [
+  // Judges (5 members)
   {
     id: 'p_judge_1',
     name: 'TS. Trần Hoàng Minh',
@@ -231,6 +232,34 @@ export const mockVirtualParticipants: VirtualParticipant[] = [
     feedbackNote: 'Cần giải thích thêm cơ chế chống nghẽn ảnh khi học sinh vứt rác dồn dập.',
   },
   {
+    id: 'p_judge_4',
+    name: 'PGS.TS. Đặng Thanh Tùng',
+    role: 'judge',
+    title: 'Giám khảo Phương pháp · Viện Khoa học Giáo dục',
+    avatarInitials: 'TT',
+    avatarBg: '#3F5E49',
+    status: 'analyzing',
+    statusText: 'Đánh giá tính ứng dụng đề tài',
+    isMuted: true,
+    isSpeaking: false,
+    feedbackNote: 'Phương pháp chọn mẫu khảo sát học sinh căng-tin khá tin cậy.',
+  },
+  {
+    id: 'p_judge_5',
+    name: 'ThS. Hoàng Mai Chi',
+    role: 'judge',
+    title: 'Giám khảo Kỹ năng · HLV Tranh biện Trẻ',
+    avatarInitials: 'MC',
+    avatarBg: '#52755E',
+    status: 'agreeing',
+    statusText: 'Gật đầu đồng tình với luận điểm',
+    isMuted: true,
+    isSpeaking: false,
+    feedbackNote: 'Tư thế đứng thẳng, ánh mắt bao quát tốt.',
+  },
+
+  // Audience (10 members)
+  {
     id: 'p_aud_1',
     name: 'Phạm Hải Đăng',
     role: 'audience',
@@ -250,7 +279,7 @@ export const mockVirtualParticipants: VirtualParticipant[] = [
     avatarInitials: 'KL',
     avatarBg: '#668772',
     status: 'agreeing',
-    statusText: 'Gật đầu đồng tình với luận điểm',
+    statusText: 'Gật đầu đồng tình với dẫn chứng',
     isMuted: true,
     isSpeaking: false,
   },
@@ -258,7 +287,7 @@ export const mockVirtualParticipants: VirtualParticipant[] = [
     id: 'p_aud_3',
     name: 'Đoàn Thanh niên Trường',
     role: 'audience',
-    title: 'Đại biểu Giám sát Hoạt động Ngoại khóa',
+    title: 'Đại biểu Giám sát Ngoại khóa',
     avatarInitials: 'ĐT',
     avatarBg: '#557560',
     status: 'listening',
@@ -266,8 +295,131 @@ export const mockVirtualParticipants: VirtualParticipant[] = [
     isMuted: true,
     isSpeaking: false,
   },
+  {
+    id: 'p_aud_4',
+    name: 'Bùi Quang Huy',
+    role: 'audience',
+    title: 'Thính giả Học sinh · Lớp 10 Tin',
+    avatarInitials: 'QH',
+    avatarBg: '#5E806B',
+    status: 'taking_notes',
+    statusText: 'Ghi chú thuật toán MobileNet',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_5',
+    name: 'Đỗ Minh Châu',
+    role: 'audience',
+    title: 'Thành viên CLB Môi trường Xanh',
+    avatarInitials: 'MC',
+    avatarBg: '#4E7059',
+    status: 'listening',
+    statusText: 'Quan tâm giải pháp rác hữu cơ',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_6',
+    name: 'Trần Đức Anh',
+    role: 'audience',
+    title: 'Học sinh Khối 12 · Ban Tự nhiên',
+    avatarInitials: 'ĐA',
+    avatarBg: '#72937E',
+    status: 'listening',
+    statusText: 'Lắng nghe phần chi phí chế tạo',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_7',
+    name: 'Lê Hoàng Yến',
+    role: 'audience',
+    title: 'Ban Truyền thông Đoàn trường',
+    avatarInitials: 'HY',
+    avatarBg: '#62836E',
+    status: 'agreeing',
+    statusText: 'Ghi hình tư liệu buổi bảo vệ',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_8',
+    name: 'Nguyễn Hữu Nam',
+    role: 'audience',
+    title: 'CLB Nghiên cứu Khoa học Trẻ',
+    avatarInitials: 'HN',
+    avatarBg: '#577863',
+    status: 'taking_notes',
+    statusText: 'Ghi chú số liệu 3.400 lượt xả rác',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_9',
+    name: 'Mai Thảo Linh',
+    role: 'audience',
+    title: 'Đại biểu Học sinh Tiêu biểu Khối 11',
+    avatarInitials: 'TL',
+    avatarBg: '#688974',
+    status: 'listening',
+    statusText: 'Theo dõi bài thuyết trình',
+    isMuted: true,
+    isSpeaking: false,
+  },
+  {
+    id: 'p_aud_10',
+    name: 'Trịnh Văn An',
+    role: 'audience',
+    title: 'Thính giả Quan sát viên Học đường',
+    avatarInitials: 'VA',
+    avatarBg: '#4A6955',
+    status: 'listening',
+    statusText: 'Chăm chú lắng nghe',
+    isMuted: true,
+    isSpeaking: false,
+  },
 ];
 
+/**
+ * Generator function providing EXACT number of participants requested
+ * with realistic allocation of judges vs audience based on mode.
+ */
+export function generateVirtualParticipants(count: number, mode: PracticeModeType): VirtualParticipant[] {
+  const judgesPool = fullParticipantPool.filter((p) => p.role === 'judge');
+  const audiencePool = fullParticipantPool.filter((p) => p.role === 'audience');
+
+  let targetJudgeCount = 1;
+  if (mode === 'defense') {
+    if (count <= 3) targetJudgeCount = 2;
+    else if (count <= 6) targetJudgeCount = 3;
+    else if (count <= 10) targetJudgeCount = 4;
+    else targetJudgeCount = 5;
+  } else if (mode === 'debate') {
+    if (count <= 3) targetJudgeCount = 1;
+    else if (count <= 6) targetJudgeCount = 2;
+    else if (count <= 10) targetJudgeCount = 3;
+    else targetJudgeCount = 4;
+  } else {
+    // basic mode
+    if (count <= 3) targetJudgeCount = 1;
+    else if (count <= 6) targetJudgeCount = 1;
+    else targetJudgeCount = 2;
+  }
+
+  // Ensure judge count does not exceed count - 1 (leave at least 1 audience if count > 1)
+  targetJudgeCount = Math.min(targetJudgeCount, Math.max(1, count - 1));
+  targetJudgeCount = Math.min(targetJudgeCount, judgesPool.length);
+
+  const targetAudienceCount = count - targetJudgeCount;
+
+  const selectedJudges = judgesPool.slice(0, targetJudgeCount);
+  const selectedAudience = audiencePool.slice(0, targetAudienceCount);
+
+  return [...selectedJudges, ...selectedAudience];
+}
+
+// 6 unified practice sessions
 export const mockPracticeSessions: PracticeSession[] = [
   {
     id: 'ses_01',
@@ -291,7 +443,7 @@ export const mockPracticeSessions: PracticeSession[] = [
     topic: 'Kỹ năng mềm',
     durationSeconds: 580, // 9m40s
     slideCount: 4,
-    participantCount: 5,
+    participantCount: 6,
     createdAt: '15:30 - 08/11/2026',
     status: 'completed',
     score: 7.9,
@@ -303,9 +455,9 @@ export const mockPracticeSessions: PracticeSession[] = [
     mode: 'basic',
     modeTitle: 'Luyện thuyết trình cơ bản',
     topic: 'Môi trường',
-    durationSeconds: 490, // 8m10s
+    durationSeconds: 720, // 12m00s
     slideCount: 3,
-    participantCount: 4,
+    participantCount: 6,
     createdAt: '09:00 - 05/11/2026',
     status: 'completed',
     score: 8.4,
@@ -317,15 +469,62 @@ export const mockPracticeSessions: PracticeSession[] = [
     mode: 'basic',
     modeTitle: 'Luyện thuyết trình cơ bản',
     topic: 'Lịch sử & Xã hội',
-    durationSeconds: 420,
-    slideCount: 6,
-    participantCount: 4,
+    durationSeconds: 840, // 14m00s
+    slideCount: 5,
+    participantCount: 3,
     createdAt: '14:20 - 01/11/2026',
     status: 'completed',
     score: 8.0,
     reportId: 'rep_04',
   },
+  {
+    id: 'ses_05',
+    title: 'Bảo vệ Đề án Xã hội: Văn hóa Ứng xử Học đường',
+    mode: 'defense',
+    modeTitle: 'Luyện bảo vệ trước ban giám khảo',
+    topic: 'Khoa học Xã hội',
+    durationSeconds: 660, // 11m00s
+    slideCount: 5,
+    participantCount: 6,
+    createdAt: '16:00 - 28/10/2026',
+    status: 'completed',
+    score: 8.2,
+    reportId: 'rep_05',
+  },
+  {
+    id: 'ses_06',
+    title: 'Thuyết trình Chuyên đề Sinh học: Rừng ngập mặn Cần Giờ',
+    mode: 'basic',
+    modeTitle: 'Luyện thuyết trình cơ bản',
+    topic: 'Sinh thái học',
+    durationSeconds: 775, // 12m55s
+    slideCount: 4,
+    participantCount: 3,
+    createdAt: '08:45 - 24/10/2026',
+    status: 'completed',
+    score: 8.5,
+    reportId: 'rep_06',
+  },
 ];
+
+// Calculate exact mathematical stats from sessions:
+// Total duration = 745 + 580 + 720 + 840 + 660 + 775 = 4320s = 72 minutes (1.2 giờ)
+// Average = 72 / 6 = 12 phút / buổi
+export const mockCurrentUser: UserProfile = {
+  id: 'usr_01',
+  fullName: 'Nguyễn Minh Quân',
+  roleDescription: 'Học sinh Lớp 11A1 - Ban Tự nhiên',
+  school: 'Trường THPT Chuyên Khoa học Tự nhiên',
+  grade: 'Khối 11',
+  avatarInitials: 'MQ',
+  stats: {
+    totalSessions: mockPracticeSessions.length, // 6
+    totalPracticeMinutes: 72,                   // 1.2 giờ
+    avgMinutesPerSession: 12,                   // 12 phút / buổi
+    totalReports: mockPracticeSessions.filter((s) => !!s.reportId).length, // 6
+    improvementPercentage: 32,                 // +32% (Chỉ số minh họa)
+  },
+};
 
 export const mockDefaultReport: EvaluationReport = {
   id: 'rep_01',
