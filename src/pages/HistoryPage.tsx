@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   History,
   Search,
@@ -15,11 +15,16 @@ import {
   ChevronRight,
   RotateCcw,
   FileCheck,
-  CheckCircle2
+  CheckCircle2,
+  Video,
+  Trash2,
+  Download,
+  X
 } from 'lucide-react';
 import { PracticeSession, PracticeModeType, ActivePage } from '../types';
 import { Button } from '../components/ui/Button';
 import { DemoNotice } from '../components/ui/DemoNotice';
+import { listLocalVideos, deleteLocalVideo, type LocalVideoRecord } from '../services/localVideoLibrary';
 
 interface HistoryPageProps {
   sessions: PracticeSession[];
@@ -36,6 +41,49 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | PracticeModeType>('all');
+  // Temporary private-by-device video library. It does NOT sync to Google Drive.
+  const [localVideos, setLocalVideos] = useState<LocalVideoRecord[]>([]);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<LocalVideoRecord | null>(null);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    listLocalVideos()
+      .then(items => { if (mounted) setLocalVideos(items); })
+      .catch(error => { if (mounted) setLocalError(error instanceof Error ? error.message : 'Không tải được video đã lưu.'); });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!playing) {
+      setPlaybackUrl(null);
+      return;
+    }
+    const blobUrl = URL.createObjectURL(playing.blob);
+    setPlaybackUrl(blobUrl);
+    return () => URL.revokeObjectURL(blobUrl);
+  }, [playing]);
+
+  const downloadLocal = (item: LocalVideoRecord) => {
+    const blobUrl = URL.createObjectURL(item.blob);
+    const anchor = document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.download = `SpeakLab_${item.sessionId}_${item.id}.${item.extension}`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+  };
+
+  const removeLocal = async (item: LocalVideoRecord) => {
+    if (!window.confirm('Xóa bản ghi này khỏi trình duyệt hiện tại? Hành động này không thể khôi phục. Video chưa được đồng bộ Google Drive.')) return;
+    try {
+      await deleteLocalVideo(item.id);
+      setLocalVideos(prev => prev.filter(video => video.id !== item.id));
+      if (playing?.id === item.id) setPlaying(null);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : 'Không xóa được bản ghi.');
+    }
+  };
 
   const filteredSessions = sessions.filter((s) => {
     const matchesSearch =
@@ -52,6 +100,61 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         title="Lịch sử các buổi luyện tập"
         message="Danh sách các phiên luyện tập đã thực hiện. Bạn có thể xem lại báo cáo phân tích hoặc khởi chạy lại buổi luyện tập với các thông số tương tự."
       />
+
+      {/* 3.2C-1: local recordings are NOT synchronized with Google Drive. */}
+      <section className="bg-white border border-[#E4E9E3] rounded-2xl p-5 md:p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Video className="w-5 h-5 text-[#5A7D65]" />
+            <h3 className="text-base font-bold text-[#3D4740]">Video đã ghi ({localVideos.length})</h3>
+          </div>
+          <span className="text-[11px] font-medium rounded-full border border-[#D9E5DC] bg-[#F7F9F6] text-[#47644F] px-3 py-1">
+            Lưu tạm trên thiết bị · Chưa đồng bộ Drive
+          </span>
+        </div>
+        <p className="text-xs text-[#768078]">
+          Video đang lưu trong trình duyệt trên thiết bị này, chưa lưu lên Google Drive của giáo viên.
+          Có thể mất nếu xóa dữ liệu trang web hoặc đổi thiết bị. Hãy tải bản quan trọng về máy.
+        </p>
+        {localError && (
+          <p role="alert" className="text-xs border border-[#DFBAB8] bg-[#FFF4F3] text-[#873631] rounded-lg p-3">{localError}</p>
+        )}
+        {localVideos.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[#D9E5DC] bg-[#F7F9F6] py-6 text-center text-xs text-[#768078]">
+            Chưa có video lưu tạm. Hãy ghi PowerPoint trong phòng họp, sau đó nhấn Dừng ghi.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {localVideos.map(video => (
+              <div key={video.id} className="flex flex-wrap items-center justify-between gap-3 border border-[#E4E9E3] rounded-xl p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-2 bg-[#EEF4F0] rounded-lg text-[#52785D]"><Video className="w-5 h-5" /></div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[#3D4740] truncate">{video.title}</div>
+                    <p className="text-[11px] text-[#768078]">
+                      {new Date(video.createdAt).toLocaleString('vi-VN')} · {Math.max(0, Math.round(video.durationMs / 1000))} giây · {(video.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center flex-wrap gap-2">
+                  <button type="button" onClick={() => setPlaying(video)} className="text-xs font-semibold px-3 py-2 bg-[#83A58E] text-white hover:bg-[#6F917A] rounded-lg cursor-pointer">Xem lại</button>
+                  <button type="button" onClick={() => downloadLocal(video)} className="text-xs px-3 py-2 border border-[#D9E5DC] rounded-lg text-[#3D4740] hover:bg-[#F7F9F6] flex items-center gap-1 cursor-pointer"><Download className="w-3.5 h-3.5" /> Tải về</button>
+                  <button type="button" onClick={() => void removeLocal(video)} className="text-xs px-3 py-2 border border-[#EAD5D2] rounded-lg text-[#873631] hover:bg-[#FFF4F3] flex items-center gap-1 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /> Xóa cục bộ</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {playing && (
+          <div className="border border-[#D9E5DC] bg-[#F7F9F6] rounded-xl p-3 space-y-3" role="region" aria-label="Xem lại video đã ghi">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-[#3D4740] truncate">{playing.title}</h4>
+              <button type="button" className="p-2 hover:bg-[#E4E9E3] rounded-lg" aria-label="Đóng video" onClick={() => setPlaying(null)}><X className="w-4 h-4" /></button>
+            </div>
+            {playbackUrl && <video key={playing.id} controls playsInline preload="metadata" src={playbackUrl} className="w-full max-h-[60vh] bg-[#202923] rounded-xl" />}
+          </div>
+        )}
+      </section>
 
       {/* Header and Filter Controls */}
       <div className="bg-white rounded-2xl border border-[#E4E9E3] p-5 md:p-6 shadow-xs space-y-4">
