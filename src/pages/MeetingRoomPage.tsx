@@ -15,7 +15,8 @@ import {
   Share2,
   Video,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Download
 } from 'lucide-react';
 import {
   UserProfile,
@@ -38,6 +39,7 @@ import { Button } from '../components/ui/Button';
 import { pptxSessionStore } from '../services/pptxService';
 import { screenShareService } from '../services/screenShareService';
 import { mediaDeviceService, DevicePermissionState } from '../services/mediaDeviceService';
+import { ScreenAudioRecordingSession, PresentationRecordingResult } from '../services/presentationRecordingService';
 
 interface MeetingRoomPageProps {
   currentUser: UserProfile;
@@ -94,6 +96,16 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const [showShareGuideModal, setShowShareGuideModal] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
+  // Đợt 3.2A: ghi màn hình PowerPoint đang chia sẻ + tiếng micro (chưa ghép webcam).
+  const recordingSessionRef = useRef<ScreenAudioRecordingSession | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'finalizing' | 'ready' | 'error'>('idle');
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordingResult, setRecordingResult] = useState<PresentationRecordingResult | null>(null);
+  const [recordingDownloaded, setRecordingDownloaded] = useState(false);
+  const [recordingNotice, setRecordingNotice] = useState<string | null>(null);
+  const [showRecordingConfirm, setShowRecordingConfirm] = useState(false);
+
   // Modals & Notices
   const [showEndModal, setShowEndModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -120,6 +132,108 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
       console.warn('Không thể truy vấn danh sách thiết bị media:', err);
     }
   };
+
+  const canLeaveMeeting = (): boolean => {
+    if (recordingSessionRef.current || recordingStatus === 'finalizing') {
+      setRecordingNotice('Hãy dừng ghi hình và đợi hoàn tất tệp trước khi rời phòng.');
+      return false;
+    }
+    if (recordingResult && !recordingDownloaded) {
+      setRecordingNotice('Bản ghi mới chỉ nằm trong bộ nhớ trình duyệt. Hãy nhấn “Lưu video về thiết bị” trước khi rời phòng.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleStartRecording = () => {
+    setShowRecordingConfirm(false);
+    if (recordingSessionRef.current || recordingStatus === 'finalizing') return;
+    if (recordingResult && !recordingDownloaded) {
+      setRecordingNotice('Hãy lưu bản ghi trước đó về thiết bị trước khi bắt đầu bản ghi mới.');
+      return;
+    }
+
+    const screen = screenShareService.getActiveStream();
+    const microphone = mediaDeviceService.getMicrophoneStream();
+    if (!screen?.getVideoTracks().some(t => t.readyState === 'live' && t.enabled)) {
+      setRecordingNotice('Để ghi PowerPoint có hiệu ứng, hãy bắt đầu chia sẻ đúng cửa sổ PowerPoint trước.');
+      return;
+    }
+    if (!microphone?.getAudioTracks().some(t => t.readyState === 'live' && t.enabled)) {
+      setRecordingNotice('Hãy bật micro thật và kiểm tra tín hiệu trước khi bắt đầu ghi hình.');
+      return;
+    }
+
+    try {
+      const sessionRecorder = new ScreenAudioRecordingSession(screen, microphone, (input) => {
+        void handleStopRecording(input === 'screen'
+          ? 'Nguồn chia sẻ PowerPoint đã ngắt; bản ghi được dừng để tránh hình đen.'
+          : 'Nguồn micro đã ngắt; bản ghi được dừng để tránh mất tiếng.');
+      });
+      sessionRecorder.start();
+      recordingSessionRef.current = sessionRecorder;
+      setRecordingResult(null);
+      setRecordingDownloaded(false);
+      setRecordingDuration(0);
+      setRecordingStartedAt(Date.now());
+      setRecordingStatus('recording');
+    } catch (error) {
+      setRecordingStatus('error');
+      setRecordingNotice(error instanceof Error ? error.message : 'Không thể khởi động ghi hình.');
+    }
+  };
+
+  const handleStopRecording = async (reason?: string) => {
+    const active = recordingSessionRef.current;
+    if (!active) return;
+    recordingSessionRef.current = null;
+    setRecordingStatus('finalizing');
+    try {
+      const result = await active.stop();
+      setRecordingResult(result);
+      setRecordingDownloaded(false);
+      setRecordingStatus('ready');
+      setRecordingDuration(Math.round(result.durationMs / 1000));
+      if (reason) setRecordingNotice(reason + ' Video đã hoàn tất, hãy lưu về thiết bị.');
+    } catch (error) {
+      setRecordingStatus('error');
+      setRecordingNotice(error instanceof Error ? error.message : 'Không thể hoàn tất bản ghi.');
+    } finally {
+      setRecordingStartedAt(null);
+    }
+  };
+
+  const handleDownloadRecording = () => {
+    if (!recordingResult) return;
+    const url = URL.createObjectURL(recordingResult.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `SpeakLab_AI_ghi_man_hinh_${new Date().toISOString().replace(/[:.]/g, '-') }.${recordingResult.fileExtension}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setRecordingDownloaded(true); // requested, not verified by OS
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+
+  useEffect(() => {
+    if (recordingStatus !== 'recording' || recordingStartedAt === null) return;
+    const interval = window.setInterval(() => {
+      setRecordingDuration(Math.floor((Date.now() - recordingStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [recordingStatus, recordingStartedAt]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (recordingSessionRef.current || recordingStatus === 'finalizing' || (recordingResult && !recordingDownloaded)) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [recordingStatus, recordingResult, recordingDownloaded]);
 
   // Real Camera Toggle Handler
   const handleToggleCamera = async () => {
@@ -173,7 +287,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   const handleToggleMic = async () => {
     setMicError(null);
     if (!isMuted) {
-      // Turn OFF
+      if (recordingSessionRef.current) {
+        await handleStopRecording('Micro đã được tắt; bản ghi kết thúc để bảo đảm quyền riêng tư.');
+      }
       mediaDeviceService.stopMicrophone();
       setIsMuted(true);
       setAudioLevel(0);
@@ -241,7 +357,10 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   }, []);
 
   // Stop Screen Share handler (stops ONLY screen capture tracks, never touches camera/mic)
-  const handleStopScreenShare = () => {
+  const handleStopScreenShare = async () => {
+    if (recordingSessionRef.current) {
+      await handleStopRecording('Chia sẻ màn hình đã dừng; bản ghi được hoàn tất.');
+    }
     screenShareService.stopShare(screenStream);
     setScreenStream(null);
     setIsScreenSharing(false);
@@ -320,6 +439,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
   // Empty dependency array [] ensures this NEVER triggers on screenStream changes!
   useEffect(() => {
     return () => {
+      recordingSessionRef.current?.dispose();
+      recordingSessionRef.current = null;
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((track) => track.stop());
         screenStreamRef.current = null;
@@ -375,7 +496,8 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 min-w-0">
           <button
             onClick={() => {
-              handleStopScreenShare();
+              if (!canLeaveMeeting()) return;
+              void handleStopScreenShare();
               mediaDeviceService.stopAll();
               onNavigate('dashboard');
             }}
@@ -412,9 +534,9 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
             <span className="text-[#6D7F72]">/ {formatTimer(session.durationSeconds)}</span>
           </div>
 
-          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-[#A8B6AB] border-l border-[#2A362D] pl-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#6D7F72]" />
-            Chưa ghi hình
+          <span className={`hidden sm:inline-flex items-center gap-1 text-[10px] border-l border-[#2A362D] pl-2 ${recordingStatus === 'recording' ? 'text-[#F09995]' : 'text-[#A8B6AB]'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${recordingStatus === 'recording' ? 'bg-[#E5484D] animate-pulse' : 'bg-[#6D7F72]'}`} />
+            {recordingStatus === 'recording' ? `REC ${formatTimer(recordingDuration)}` : recordingStatus === 'finalizing' ? 'Đang hoàn tất…' : recordingStatus === 'ready' ? 'Đã ghi xong' : 'Chưa ghi hình'}
           </span>
         </div>
 
@@ -648,7 +770,51 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           setShowSettingsModal(true);
         }}
         onEndMeeting={() => setShowEndModal(true)}
+        recordingStatus={recordingStatus}
+        onRecordClick={() => recordingStatus === 'recording' ? void handleStopRecording() : setShowRecordingConfirm(true)}
       />
+
+      {/* Đợt 3.2A: xác nhận ghi màn hình PowerPoint + micro */}
+      <Modal
+        isOpen={showRecordingConfirm}
+        onClose={() => setShowRecordingConfirm(false)}
+        title="Xác nhận bắt đầu ghi hình"
+        subtitle="Đợt 3.2A – Ghi màn hình PowerPoint và tiếng micro"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setShowRecordingConfirm(false)}>Hủy</Button>
+            <Button variant="primary" size="sm" onClick={handleStartRecording}>Bắt đầu ghi</Button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-xs text-[#3D4740]">
+          <p>Chỉ ghi <strong>màn hình PowerPoint đang chia sẻ</strong> và <strong>âm thanh micro</strong>. Camera chưa được đưa vào video ở bước 3.2A.</p>
+          <p className="text-[#647568]">Video được xử lý cục bộ, không tự động tải lên máy chủ. Hãy tải video về thiết bị sau khi dừng.</p>
+          <p className="font-medium text-[#873631]">Hãy bật micro và chia sẻ đúng cửa sổ trình chiếu PowerPoint trước khi bắt đầu.</p>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(recordingNotice)}
+        onClose={() => setRecordingNotice(null)}
+        title="Thông báo ghi hình"
+        footer={<Button variant="primary" size="sm" onClick={() => setRecordingNotice(null)}>Đã hiểu</Button>}
+      >
+        <p className="text-xs text-[#3D4740]">{recordingNotice}</p>
+      </Modal>
+
+      {recordingResult && recordingStatus === 'ready' && (
+        <div className="fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 w-[min(95vw,430px)] bg-[#F7F9F6] border border-[#83A58E] shadow-xl rounded-xl p-3 z-40 text-[#3D4740] flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold">Video PowerPoint + micro đã hoàn tất</p>
+            <p className="text-[11px] text-[#768078]">{formatTimer(Math.round(recordingResult.durationMs / 1000))} · {(recordingResult.bytes / 1024 / 1024).toFixed(1)} MB · {recordingResult.fileExtension.toUpperCase()}</p>
+            <p className="text-[10px] text-[#768078]">{recordingDownloaded ? 'Đã yêu cầu tải xuống; hãy kiểm tra thư mục Tải xuống.' : 'Chưa tải về – có thể mất nếu rời trang.'}</p>
+          </div>
+          <button onClick={handleDownloadRecording} className="bg-[#83A58E] text-white hover:bg-[#6F917A] font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 shrink-0 cursor-pointer">
+            <Download className="w-4 h-4" /> Lưu video
+          </button>
+        </div>
+      )}
 
       {/* 4. Modals */}
 
@@ -696,14 +862,16 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
         onClose={() => setShowEndModal(false)}
         elapsedSeconds={elapsedSeconds}
         onConfirmViewReport={() => {
-          handleStopScreenShare();
+          if (!canLeaveMeeting()) { setShowEndModal(false); return; }
+          void handleStopScreenShare();
           mediaDeviceService.stopAll();
           setIsTimerRunning(false);
           setShowEndModal(false);
           onFinishSession();
         }}
         onReturnToDashboard={() => {
-          handleStopScreenShare();
+          if (!canLeaveMeeting()) { setShowEndModal(false); return; }
+          void handleStopScreenShare();
           mediaDeviceService.stopAll();
           setIsTimerRunning(false);
           setShowEndModal(false);
@@ -759,16 +927,16 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
               🛡️ Cam kết bảo mật và quyền riêng tư:
             </p>
             <p>
-              Camera và micro chỉ được xem trước trong phiên luyện tập này. Chức năng ghi hình chưa được kích hoạt.
+              Camera và micro mặc định chỉ để xem trước. Ghi màn hình PowerPoint kèm tiếng micro chỉ bắt đầu khi bạn chủ động xác nhận. Không ghi camera trong Đợt 3.2A.
             </p>
           </div>
 
           <div className="space-y-2 text-[11px] text-[#556057] leading-relaxed">
             <p>
-              • <strong>Không lưu trữ:</strong> Hệ thống không quay video, không ghi âm vào bộ nhớ máy chủ hay thiết bị.
+              • <strong>Lưu cục bộ:</strong> Video được giữ trong bộ nhớ phiên cho đến khi bạn chủ động tải về thiết bị; không lưu trên máy chủ.
             </p>
             <p>
-              • <strong>Không truyền phát:</strong> Hình ảnh webcam và tín hiệu micro chạy trực tiếp trong trình duyệt cục bộ của bạn để tự quan sát dáng điệu và kiểm tra âm lượng.
+              • <strong>Không gửi dữ liệu:</strong> Webcam và micro được xử lý cục bộ trong trình duyệt; bản ghi không được tải lên dịch vụ ngoài.
             </p>
             <p>
               • <strong>Quyền kiểm soát:</strong> Bạn có thể bật hoặc tắt camera và micro bất kỳ lúc nào bằng nút điều khiển ở thanh công cụ bên dưới.
@@ -828,10 +996,18 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
               {availableMicrophones.length > 0 ? (
                 <select
                   value={selectedMicrophoneId}
-                  onChange={(e) => {
-                    setSelectedMicrophoneId(e.target.value);
+                  onChange={async (e) => {
+                    const deviceId = e.target.value;
+                    setSelectedMicrophoneId(deviceId);
                     if (!isMuted) {
-                      mediaDeviceService.startMicrophone(e.target.value);
+                      if (recordingSessionRef.current) {
+                        await handleStopRecording('Đã đổi micro trong lúc ghi; video trước đó được hoàn tất.');
+                      }
+                      try {
+                        await mediaDeviceService.startMicrophone(deviceId);
+                      } catch (error) {
+                        setMicError(error instanceof Error ? error.message : 'Không đổi được micro.');
+                      }
                     }
                   }}
                   className="w-full p-2 rounded-lg border border-[#D9E5DC] bg-white text-xs text-[#3D4740]"
@@ -877,7 +1053,7 @@ export const MeetingRoomPage: React.FC<MeetingRoomPageProps> = ({
           </div>
 
           <div className="p-2.5 rounded-lg bg-[#FAFBF9] border border-[#E4E9E3] text-[11px] text-[#768078]">
-            Lưu ý: Camera và micro chỉ được xem trước trong phiên luyện tập này. Chức năng ghi hình chưa được kích hoạt.
+            Lưu ý: Chỉ khi xác nhận ghi, ứng dụng mới thu màn hình chia sẻ và tiếng micro. Đợt 3.2A chưa ghi webcam.
           </div>
         </div>
       </Modal>
